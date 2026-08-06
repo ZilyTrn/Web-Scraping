@@ -311,11 +311,12 @@ func generateDataJS() error {
 		return err
 	}
 
-	var forecastData interface{}
+	var forecastData map[string]interface{}
 	err = json.Unmarshal(forecastBytes, &forecastData)
 	if err != nil {
 		return err
 	}
+	forecastData["location"] = "Hồ Chí Minh, Việt Nam"
 
 	// 3. Write data.js
 	out, err := os.Create("data.js")

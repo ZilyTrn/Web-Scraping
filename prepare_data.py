@@ -131,7 +131,8 @@ def main():
         with open(forecast_json, "r", encoding="utf-8") as f:
             forecast_data = json.load(f)
             
-        location = forecast_data.get("location", "")
+        forecast_data["location"] = "Hồ Chí Minh, Việt Nam"
+        location = "Hồ Chí Minh, Việt Nam"
         update_time = forecast_data.get("updateTime", "")
         forecast_str = json.dumps(forecast_data)
         
