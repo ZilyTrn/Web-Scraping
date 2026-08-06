@@ -1,0 +1,10 @@
+- [x] Implement Login/Register UI and LocalAuth state
+- [x] Update index.html with Auth Overlay
+- [x] Update style.css with Auth styles
+- [x] Update app.js with Auth logic
+- [x] Verify Login/Register functionality
+- [x] Add Admin Management tab for local accounts
+- [x] Implement Project Management (Add/Edit/Delete, Empty Initial State)
+- [x] Implement Metric Card Clicks to View Details & Forecasts
+  - [x] Add details-modal to index.html
+  - [x] Update app.js with click events, Chart.js drawer, and redirect logic

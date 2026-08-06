@@ -1,0 +1,19 @@
+# Credentials & Environment
+.env
+*.env
+
+# SQLite Databases & Local Storage
+*.db
+data/*.db
+data/weather_data.db
+
+# Temp/Scratch files
+scratch/
+.system_generated/
+.gemini/
+.agents/
+
+# OS Files
+Thumbs.db
+Desktop.ini
+.DS_Store

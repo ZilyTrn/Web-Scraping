@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linh Dashboard - Live Agrifood Analytics</title>
+    
+    <!-- Fonts & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.2.96/css/materialdesignicons.min.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <!-- Custom Style -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Authentication Overlay -->
+    <div id="auth-container" class="auth-container">
+        <!-- Login Card -->
+        <div class="auth-card" id="login-card">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <span class="mdi mdi-axis-arrow"></span>
+                </div>
+                <h2>Welcome Back</h2>
+                <p>Log in to access AxisStream Dashboard</p>
+            </div>
+            <form id="login-form">
+                <div class="form-group">
+                    <label for="login-email">Email Address</label>
+                    <div class="input-wrap">
+                        <span class="mdi mdi-email-outline"></span>
+                        <input type="email" id="login-email" required placeholder="name@company.com">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="login-password">Password</label>
+                    <div class="input-wrap">
+                        <span class="mdi mdi-lock-outline"></span>
+                        <input type="password" id="login-password" required placeholder="••••••••">
+                    </div>
+                </div>
+                <div class="error-msg" id="login-error"></div>
+                <button type="submit" class="btn btn-primary btn-block">Log In</button>
+            </form>
+            <div class="auth-footer">
+                <p>Don't have an account? <a href="#" id="to-register">Register here</a></p>
+            </div>
+        </div>
+
+        <!-- Register Card -->
+        <div class="auth-card hidden" id="register-card">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <span class="mdi mdi-axis-arrow"></span>
+                </div>
+                <h2>Create Account</h2>
+                <p>Register a new account</p>
+            </div>
+            <form id="register-form">
+                <div class="form-group">
+                    <label for="register-name">Full Name</label>
+                    <div class="input-wrap">
+                        <span class="mdi mdi-account-outline"></span>
+                        <input type="text" id="register-name" required placeholder="John Doe">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="register-email">Email Address</label>
+                    <div class="input-wrap">
+                        <span class="mdi mdi-email-outline"></span>
+                        <input type="email" id="register-email" required placeholder="name@company.com">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="register-password">Password</label>
+                    <div class="input-wrap">
+                        <span class="mdi mdi-lock-outline"></span>
+                        <input type="password" id="register-password" required placeholder="••••••••">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="register-confirm">Confirm Password</label>
+                    <div class="input-wrap">
+                        <span class="mdi mdi-lock-check-outline"></span>
+                        <input type="password" id="register-confirm" required placeholder="••••••••">
+                    </div>
+                </div>
+                <div class="error-msg" id="register-error"></div>
+                <button type="submit" class="btn btn-primary btn-block">Sign Up</button>
+            </form>
+            <div class="auth-footer">
+                <p>Already have an account? <a href="#" id="to-login">Log in here</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="app-container" style="display: none;">
+        
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <div class="brand-logo">
+                    <span class="mdi mdi-axis-arrow"></span>
+                </div>
+                <div class="brand-name">
+                    <h1>Linh</h1>
+                    <span>AGRIFOOD ANALYTICS</span>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <ul>
+                    <li class="active" data-target="dashboard">
+                        <span class="mdi mdi-view-dashboard-outline"></span>
+                        <span>Dashboard</span>
+                    </li>
+                    <li data-target="forecast">
+                        <span class="mdi mdi-weather-partly-cloudy"></span>
+                        <span>Jane's Forecast</span>
+                    </li>
+                    <li data-target="logs">
+                        <span class="mdi mdi-table-large"></span>
+                        <span>Telemetry Logs</span>
+                    </li>
+                    <li data-target="projects">
+                        <span class="mdi mdi-folder-cog-outline"></span>
+                        <span>Manage Projects</span>
+                    </li>
+                    <li id="nav-users" data-target="users" style="display: none;">
+                        <span class="mdi mdi-account-cog-outline"></span>
+                        <span>Manage Users</span>
+                    </li>
+                </ul>
+            </nav>
+            
+            <div class="sidebar-footer">
+                <div class="account-profile">
+                    <div class="profile-avatar" id="user-avatar">H</div>
+                    <div class="profile-info">
+                        <h4 id="user-name">Linh</h4>
+                        <span id="user-email">linhbeocorp.vn</span>
+                    </div>
+                    <button class="logout-btn" id="btn-logout" title="Log out">
+                        <span class="mdi mdi-logout"></span>
+                    </button>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Main Content Area -->
+        <main class="main-content">
+            
+            <!-- Header -->
+            <header class="header">
+                <div class="header-title" style="display: flex; align-items: center; gap: 15px;">
+                    <button id="btn-back-nav" class="btn btn-outline" style="padding: 6px; border-radius: 50%; width: 36px; height: 36px; display: none; align-items: center; justify-content: center; min-width: 36px;" title="Go Back">
+                        <span class="mdi mdi-arrow-left" style="font-size: 20px;"></span>
+                    </button>
+                    <div>
+                        <h2>Live Dashboard</h2>
+                        <p class="project-info">Project: <span class="badge" id="project-badge">LINHBEOCORP</span></p>
+                    </div>
+                </div>
+                
+                <div class="header-actions">
+                    <div class="device-selector">
+                        <span class="mdi mdi-weather-station icon"></span>
+                        <span style="font-size: 14px; font-weight: 600;">LinhBeo Weather Station (A23)</span>
+                    </div>
+                    <div class="last-updated">
+                        <span class="mdi mdi-sync spinner" id="sync-icon"></span>
+                        <span id="update-time">Loading...</span>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Dashboard Tab -->
+            <section id="dashboard-tab" class="tab-content active">
+                
+                <!-- Main Metrics Cards Grid -->
+                <div class="metrics-grid">
+                    
+                    <!-- Temp -->
+                    <div class="metric-card" id="card-temp">
+                        <div class="card-header">
+                            <span class="metric-title">Temperature</span>
+                            <span class="metric-icon mdi mdi-thermometer red"></span>
+                        </div>
+                        <div class="card-value"><span id="val-temp">--</span><span class="unit">°C</span></div>
+                        <div class="card-footer">
+                            <span class="desc">Feels like actual atmospheric temp</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Humidity -->
+                    <div class="metric-card" id="card-humidity">
+                        <div class="card-header">
+                            <span class="metric-title">Humidity</span>
+                            <span class="metric-icon mdi mdi-water blue"></span>
+                        </div>
+                        <div class="card-value"><span id="val-humidity">--</span><span class="unit">%</span></div>
+                        <div class="card-footer">
+                            <span class="desc">Relative atmospheric moisture</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Rainfall -->
+                    <div class="metric-card" id="card-rainfall">
+                        <div class="card-header">
+                            <span class="metric-title">Today's Rainfall</span>
+                            <span class="metric-icon mdi mdi-weather-rainy cyan"></span>
+                        </div>
+                        <div class="card-value"><span id="val-rainfall">--</span><span class="unit">mm</span></div>
+                        <div class="card-footer">
+                            <span class="desc">Cumulative: <span id="val-rainfall-total">--</span> mm</span>
+                        </div>
+                    </div>
+                    
+                    <!-- Wind -->
+                    <div class="metric-card" id="card-wind">
+                        <div class="card-header">
+                            <span class="metric-title">Wind Speed</span>
+                            <span class="metric-icon mdi mdi-weather-windy teal"></span>
+                        </div>
+                        <div class="card-value"><span id="val-wind">--</span><span class="unit">km/h</span></div>
+                        <div class="card-footer">
+                            <span class="desc">Direction: <span id="val-wind-dir">--</span></span>
+                        </div>
+                    </div>
+                    
+                    <!-- Weather Forecast Card -->
+                    <div class="metric-card" id="card-forecast">
+                        <div class="card-header">
+                            <span class="metric-title">Forecast Today</span>
+                            <span class="metric-icon mdi mdi-weather-partly-cloudy yellow"></span>
+                        </div>
+                        <div class="card-value" style="display: flex; align-items: center; gap: 10px;">
+                            <img id="dash-forecast-icon" src="" alt="Forecast Icon" style="width: 38px; height: 38px; display: none;">
+                            <div>
+                                <span id="dash-forecast-temp" style="font-size: 26px;">--</span><span class="unit" style="display: none;">°C</span>
+                            </div>
+                        </div>
+                        <div class="card-footer">
+                            <span class="desc" id="dash-forecast-text" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 100%;">Loading forecast...</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Visualizations Row -->
+                <div class="charts-row">
+                    <!-- Historical Trend Chart -->
+                    <div class="chart-card">
+                        <div class="card-header">
+                            <h3>Temperature & Humidity Trends</h3>
+                            <span class="card-subtitle">Last 24 Hours</span>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="trendChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <!-- Solar & Pressure Metrics -->
+                    <div class="sub-metrics-column">
+                        
+                        <div class="small-metric-card">
+                            <span class="mdi mdi-gauge icon"></span>
+                            <div class="info">
+                                <span>MSL Pressure</span>
+                                <h4 id="val-pressure">-- hPa</h4>
+                            </div>
+                        </div>
+                        
+                        <div class="small-metric-card">
+                            <span class="mdi mdi-weather-sunny icon"></span>
+                            <div class="info">
+                                <span>Solar Radiation</span>
+                                <h4 id="val-solar">-- W/m²</h4>
+                            </div>
+                        </div>
+                        
+                        <div class="small-metric-card">
+                            <span class="mdi mdi-white-balance-sunny icon"></span>
+                            <div class="info">
+                                <span>UV Index</span>
+                                <h4 id="val-uv">--</h4>
+                            </div>
+                        </div>
+                        
+                        <div class="small-metric-card">
+                            <span class="mdi mdi-chart-bell-curve-cumulative icon"></span>
+                            <div class="info">
+                                <span>Delta T (∆T)</span>
+                                <h4 id="val-deltat">-- °C</h4>
+                            </div>
+                        </div>
+                        
+                    </div>
+                </div>
+                
+                <!-- Soil Probe & Additional Data -->
+                <div class="bottom-row" style="display: flex; gap: 20px; flex-wrap: wrap;">
+                    <!-- Soil Probe Card -->
+                    <div class="soil-card" style="flex: 1.2; min-width: 320px;">
+                        <div class="card-header">
+                            <h3><span class="mdi mdi-sprout icon"></span> Soil Probe Conditions</h3>
+                            <span class="card-subtitle">Vertical Profile (LinhBeo Soil Probe 300mm)</span>
+                        </div>
+                        <div class="soil-table-container">
+                            <table class="soil-table">
+                                <thead>
+                                    <tr>
+                                        <th>Depth</th>
+                                        <th>Moisture (%)</th>
+                                        <th>Temperature (°C)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="soil-table-body">
+                                    <!-- Dynamic rows loaded in app.js -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <!-- Agricultural Advisor Card -->
+                    <div class="soil-card" style="flex: 1; min-width: 300px;">
+                        <div class="card-header">
+                            <h3><span class="mdi mdi-brain icon"></span> Smart Farm Advisor</h3>
+                            <span class="card-subtitle">AI-assisted recommendations based on live sensors</span>
+                        </div>
+                        <div style="padding: 15px 0;">
+                            <!-- Crops Advisory -->
+                            <div style="margin-bottom: 15px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                                    <span id="advisor-crop-icon" class="mdi mdi-leaf" style="font-size: 18px; color: var(--green);"></span>
+                                    <h4 style="font-size: 13.5px; margin: 0; font-weight: 600; color: var(--text-primary);">Crops: <span id="advisor-crop-status" style="font-weight: 700;">--</span></h4>
+                                </div>
+                                <p id="advisor-crop-desc" style="font-size: 12.5px; color: var(--text-secondary); margin: 0 0 3px 26px; line-height: 1.45;">--</p>
+                                <p style="font-size: 12.5px; color: var(--text-primary); margin: 0 0 0 26px; line-height: 1.45;"><strong>Action:</strong> <span id="advisor-crop-action">--</span></p>
+                            </div>
+                            
+                            <!-- Livestock Advisory -->
+                            <div style="margin-bottom: 15px;">
+                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                                    <span id="advisor-live-icon" class="mdi mdi-cow" style="font-size: 18px; color: var(--green);"></span>
+                                    <h4 style="font-size: 13.5px; margin: 0; font-weight: 600; color: var(--text-primary);">Livestock: <span id="advisor-live-status" style="font-weight: 700;">--</span></h4>
+                                </div>
+                                <p id="advisor-live-desc" style="font-size: 12.5px; color: var(--text-secondary); margin: 0 0 3px 26px; line-height: 1.45;">--</p>
+                                <p style="font-size: 12.5px; color: var(--text-primary); margin: 0 0 0 26px; line-height: 1.45;"><strong>Action:</strong> <span id="advisor-live-action">--</span></p>
+                            </div>
+                            
+                            <!-- Overall Alert Box -->
+                            <div id="advisor-alert-box" style="display: flex; gap: 10px; align-items: flex-start; padding: 10px; border-radius: 8px; background: rgba(0, 242, 254, 0.05); border: 1px dashed rgba(0, 242, 254, 0.2); margin-top: 10px;">
+                                <span id="advisor-alert-icon" class="mdi mdi-alert" style="font-size: 18px; color: var(--primary);"></span>
+                                <div style="font-size: 12px; line-height: 1.4; color: var(--text-primary);">
+                                    <strong>Weather Advisory:</strong> <span id="advisor-alert-text">--</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+            </section>
+            
+            <!-- Jane's Forecast Tab -->
+            <section id="forecast-tab" class="tab-content">
+                
+                <!-- Forecast Backdrop Art -->
+                <div class="forecast-backdrop" id="forecast-backdrop">
+                    <div class="backdrop-gradient"></div>
+                    <div class="forecast-summary-overlay">
+                        <div class="summary-meta">
+                            <span id="forecast-location"><span class="mdi mdi-map-marker"></span> Loading...</span>
+                            <span id="forecast-update-time">Loading...</span>
+                        </div>
+                        <div class="summary-hero">
+                            <div class="forecast-icon-wrap" id="forecast-avatar-wrap">
+                                <!-- Dynamic Icon -->
+                            </div>
+                            <div class="forecast-temp-wrap">
+                                <span class="temp" id="forecast-main-temp">--</span><span class="degree">°C</span>
+                            </div>
+                        </div>
+                        <p class="forecast-text" id="forecast-summary-text">...</p>
+                        
+                        <!-- Mini statistics in backdrop -->
+                        <div class="backdrop-stats">
+                            <div class="b-stat">
+                                <span class="mdi mdi-weather-rainy"></span>
+                                <div>
+                                    <span>Chance of Rain</span>
+                                    <strong id="b-stat-rain">--%</strong>
+                                </div>
+                            </div>
+                            <div class="b-stat">
+                                <span class="mdi mdi-weather-windy"></span>
+                                <div>
+                                    <span>Wind Speed</span>
+                                    <strong id="b-stat-wind">-- km/h</strong>
+                                </div>
+                            </div>
+                            <div class="b-stat">
+                                <span class="mdi mdi-gauge"></span>
+                                <div>
+                                    <span>Pressure</span>
+                                    <strong id="b-stat-pressure">-- hPa</strong>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Spray conditions and Forecast Advisory Row -->
+                <div style="display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 25px;">
+                    <!-- Spray conditions -->
+                    <div class="spray-card" id="spray-card" style="flex: 1.2; min-width: 320px; margin-bottom: 0;">
+                        <div class="card-header">
+                            <h3><span class="mdi mdi-spray icon"></span> Agricultural Spraying Assessment</h3>
+                            <span class="card-subtitle">Crop spraying suitability rating</span>
+                        </div>
+                        <div class="spray-content">
+                            <div class="rating-badge" id="spray-badge">--</div>
+                            <div class="rating-desc">
+                                <h4 id="spray-title">--</h4>
+                                <p id="spray-desc">--</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Forecast Advisory Summary Card -->
+                    <div class="spray-card" style="flex: 1; min-width: 300px; margin-bottom: 0; display: flex; flex-direction: column; justify-content: space-between;">
+                        <div class="card-header">
+                            <h3><span class="mdi mdi-trending-up icon"></span> Forecast Advisory</h3>
+                            <span class="card-subtitle">Agricultural planning advisor</span>
+                        </div>
+                        <div class="spray-content" style="flex-direction: column; align-items: flex-start; gap: 10px; padding: 15px 0;">
+                            <div style="display: flex; align-items: center; gap: 10px; width: 100%;">
+                                <span id="forecast-alert-icon" class="mdi mdi-lightbulb-on-outline" style="font-size: 24px; color: var(--primary);"></span>
+                                <h4 id="forecast-alert-title" style="font-size: 14px; margin: 0; font-weight: 600; color: var(--text-primary);">Planning Suggestion</h4>
+                            </div>
+                            <p id="forecast-alert-desc" style="font-size: 12.5px; line-height: 1.45; color: var(--text-secondary); margin: 0;">Loading forecast advisory insights...</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Daily Cards -->
+                <div class="upcoming-forecast">
+                    <h3>Upcoming Forecast</h3>
+                    <div class="daily-cards-grid" id="daily-forecast-grid">
+                        <!-- Dynamic daily cards -->
+                    </div>
+                </div>
+                
+            </section>
+            
+            <!-- Telemetry Logs Tab -->
+            <section id="logs-tab" class="tab-content">
+                <!-- Logs Summary Cards Grid -->
+                <div class="metrics-grid" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin-bottom: 20px;">
+                    <div class="metric-card" style="padding: 15px;">
+                        <div class="card-header" style="margin-bottom: 5px;">
+                            <span class="metric-title" style="font-size: 11px;">Total Scraped Logs</span>
+                            <span class="metric-icon mdi mdi-database" style="font-size: 18px; color: var(--primary);"></span>
+                        </div>
+                        <div class="card-value" style="font-size: 22px;" id="log-stat-count">--</div>
+                        <div class="card-footer" style="margin-top: 5px;"><span class="desc">Total records stored in data.js</span></div>
+                    </div>
+                    <div class="metric-card" style="padding: 15px;">
+                        <div class="card-header" style="margin-bottom: 5px;">
+                            <span class="metric-title" style="font-size: 11px;">First Log Recorded</span>
+                            <span class="metric-icon mdi mdi-clock-start" style="font-size: 18px; color: var(--green);"></span>
+                        </div>
+                        <div class="card-value" style="font-size: 13px; font-weight: 600; line-height: 1.8;" id="log-stat-start">--</div>
+                        <div class="card-footer" style="margin-top: 5px;"><span class="desc">Earliest sensor recording</span></div>
+                    </div>
+                    <div class="metric-card" style="padding: 15px;">
+                        <div class="card-header" style="margin-bottom: 5px;">
+                            <span class="metric-title" style="font-size: 11px;">Latest Log Recorded</span>
+                            <span class="metric-icon mdi mdi-clock-end" style="font-size: 18px; color: var(--orange);"></span>
+                        </div>
+                        <div class="card-value" style="font-size: 13px; font-weight: 600; line-height: 1.8;" id="log-stat-end">--</div>
+                        <div class="card-footer" style="margin-top: 5px;"><span class="desc">Most recent telemetry sync</span></div>
+                    </div>
+                </div>
+                
+                <div class="logs-card">
+                    <div class="card-header logs-header">
+                        <div>
+                            <h3>Historical Telemetry Logs</h3>
+                            <span class="card-subtitle">Showing latest parsed records</span>
+                        </div>
+                        <div class="log-actions">
+                            <div class="search-box">
+                                <span class="mdi mdi-magnify search-icon"></span>
+                                <input type="text" id="log-search" placeholder="Search by time/date...">
+                            </div>
+                            <button class="btn btn-primary" id="btn-export">
+                                <span class="mdi mdi-download"></span> Export CSV
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="table-container">
+                        <table class="logs-table" id="logs-table">
+                            <thead>
+                                <tr id="logs-headers">
+                                    <!-- Dynamic headers -->
+                                </tr>
+                            </thead>
+                            <tbody id="logs-body">
+                                <!-- Dynamic rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                    
+                    <div class="table-pagination">
+                        <span id="page-info">Showing page 1 of --</span>
+                        <div class="pagination-buttons">
+                            <button class="btn btn-outline" id="btn-prev-page" disabled>Previous</button>
+                            <button class="btn btn-outline" id="btn-next-page">Next</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- User Account Management Tab -->
+            <section id="users-tab" class="tab-content">
+                <div class="logs-card">
+                    <div class="card-header logs-header">
+                        <div>
+                            <h3>User Account Management</h3>
+                            <span class="card-subtitle">Admin control panel to monitor and delete accounts</span>
+                        </div>
+                    </div>
+                    
+                    <div class="table-container">
+                        <table class="logs-table">
+                            <thead>
+                                <tr>
+                                    <th>Name</th>
+                                    <th>Email Address</th>
+                                    <th>Password</th>
+                                    <th style="width: 120px; text-align: center;">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="users-table-body">
+                                <!-- Dynamic user list -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Project Management Tab -->
+            <section id="projects-tab" class="tab-content">
+                <div class="logs-card">
+                    <div class="card-header logs-header">
+                        <div>
+                            <h3>Project Directory Management</h3>
+                            <span class="card-subtitle">Add, edit, or remove your measurement projects</span>
+                        </div>
+                        <button class="btn btn-primary" id="btn-add-project">
+                            <span class="mdi mdi-plus"></span> Add Project
+                        </button>
+                    </div>
+                    
+                    <div class="projects-list-container">
+                        <div class="projects-grid" id="projects-grid">
+                            <!-- Dynamic project cards or Empty state -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+        </main>
+        
+    </div>
+
+    <!-- Project Form Modal -->
+    <div id="project-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="modal-title">Add New Project</h3>
+                <button class="modal-close" id="btn-close-modal">
+                    <span class="mdi mdi-close"></span>
+                </button>
+            </div>
+            <form id="project-form">
+                <input type="hidden" id="project-edit-index">
+                <div class="form-group">
+                    <label for="project-name-input">Project Name</label>
+                    <div class="input-wrap">
+                        <span class="mdi mdi-folder-outline"></span>
+                        <input type="text" id="project-name-input" required placeholder="e.g. TANBAOCORP_Demo">
+                    </div>
+                    <span class="field-hint">Note: Match scraped project names to link telemetry data automatically.</span>
+                </div>
+                
+                <div class="form-group">
+                    <label for="project-id-input">Project ID</label>
+                    <div class="input-wrap">
+                        <span class="mdi mdi-identifier"></span>
+                        <input type="text" id="project-id-input" required placeholder="e.g. 1b73e2fe-1e6c-46c6-8534-82c0e03be283">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="project-schema-input">Org Schema</label>
+                    <div class="input-wrap">
+                        <span class="mdi mdi-database-outline"></span>
+                        <input type="text" id="project-schema-input" required placeholder="e.g. tanbaocorp">
+                    </div>
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-block" id="btn-submit-project">Save Project</button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Metric Details Modal -->
+    <div id="details-modal" class="modal-overlay" style="display: none;">
+        <div class="modal-card" style="max-width: 600px; width: 95%;">
+            <div class="modal-header">
+                <h3 id="details-modal-title"><span class="mdi mdi-chart-timeline-variant"></span> Metric Analytics</h3>
+                <button class="modal-close" id="btn-close-details">
+                    <span class="mdi mdi-close"></span>
+                </button>
+            </div>
+            
+            <div class="details-modal-tabs" style="display: flex; gap: 10px; margin-bottom: 20px;">
+                <button class="btn btn-primary" id="btn-modal-chart-tab" style="padding: 6px 12px; font-size: 12px;">Trend Chart</button>
+                <button class="btn btn-outline" id="btn-modal-log-tab" style="padding: 6px 12px; font-size: 12px;">Recent History</button>
+            </div>
+            
+            <!-- Modal Chart Panel -->
+            <div id="details-modal-chart-view">
+                <div class="chart-container" style="height: 300px; position: relative;">
+                    <canvas id="detailsChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Modal Raw List Panel -->
+            <div id="details-modal-log-view" style="display: none;">
+                <div class="table-container" style="max-height: 300px; border: 1px solid var(--border-glow); border-radius: 10px;">
+                    <table class="logs-table">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Value</th>
+                            </tr>
+                        </thead>
+                        <tbody id="details-modal-log-body">
+                            <!-- Dynamic rows -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Load data.js (Variables: WEATHER_TELEMETRY, JANES_FORECAST) -->
+    <script src="data.js"></script>
+    
+    <!-- App Script -->
+    <script src="app.js"></script>
+</body>
+</html>
