@@ -684,7 +684,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         
         // Location & Update time
-        document.getElementById("forecast-location").innerHTML = `<span class="mdi mdi-map-marker"></span> ${JANES_FORECAST.location}`;
+        document.getElementById("forecast-location").innerHTML = `<span class="mdi mdi-map-marker"></span> Hồ Chí Minh, Việt Nam`;
         
         if (JANES_FORECAST.updateTime) {
             const date = new Date(JANES_FORECAST.updateTime);
