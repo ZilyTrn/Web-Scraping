@@ -63,6 +63,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const projectIdInput = document.getElementById("project-id-input");
     const projectSchemaInput = document.getElementById("project-schema-input");
     const projectsGrid = document.getElementById("projects-grid");
+    const projectSearchInput = document.getElementById("project-search-input");
     const modalTitle = document.getElementById("modal-title");
 
     // --- PROJECT STATE ---
@@ -1113,6 +1114,9 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     function populateUserTable() {
+        if (typeof populateAdminApprovalsTable === "function") {
+            populateAdminApprovalsTable();
+        }
         const tbody = document.getElementById("users-table-body");
         if (!tbody) return;
         tbody.innerHTML = "";
@@ -1335,6 +1339,13 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // Real-time project search event listener
+    if (projectSearchInput) {
+        projectSearchInput.addEventListener("input", () => {
+            populateProjectsList();
+        });
+    }
+
     function populateProjectsList() {
         if (!projectsGrid) return;
         projectsGrid.innerHTML = "";
@@ -1352,8 +1363,31 @@ document.addEventListener("DOMContentLoaded", () => {
             `;
             return;
         }
+
+        const query = projectSearchInput ? projectSearchInput.value.trim().toLowerCase() : "";
+        let displayList = projectsList;
         
-        projectsList.forEach((proj, index) => {
+        if (query) {
+            displayList = projectsList.filter(proj => 
+                proj.name.toLowerCase().includes(query) || 
+                proj.id.toLowerCase().includes(query) || 
+                (proj.schema && proj.schema.toLowerCase().includes(query)) ||
+                (proj.deviceId && proj.deviceId.toLowerCase().includes(query))
+            );
+        }
+
+        if (displayList.length === 0) {
+            projectsGrid.innerHTML = `
+                <div class="empty-state-box" style="padding: 30px;">
+                    <span class="empty-icon mdi mdi-magnify-minus"></span>
+                    <h4>Không tìm thấy kết quả</h4>
+                    <p>Không tìm thấy dự án nào khớp với từ khóa "<strong>${query}</strong>".</p>
+                </div>
+            `;
+            return;
+        }
+        
+        displayList.forEach((proj) => {
             const isActive = proj.id === activeProjectId;
             const card = document.createElement("div");
             card.className = `project-card ${isActive ? "active" : ""}`;
@@ -1382,13 +1416,13 @@ document.addEventListener("DOMContentLoaded", () => {
                     </div>
                 </div>
                 <div class="project-card-actions">
-                    <button class="btn ${isActive ? 'btn-primary' : 'btn-outline'}" onclick="activateProject(${index})" ${isActive ? 'disabled' : ''}>
+                    <button class="btn ${isActive ? 'btn-primary' : 'btn-outline'}" onclick="activateProject('${proj.id}')" ${isActive ? 'disabled' : ''}>
                         ${isActive ? 'Active' : 'Activate'}
                     </button>
-                    <button class="btn btn-outline" onclick="editProject(${index})">
+                    <button class="btn btn-outline" onclick="editProject('${proj.id}')">
                         Edit
                     </button>
-                    <button class="btn btn-outline" style="color: var(--red); border-color: rgba(255, 94, 126, 0.2);" onclick="deleteProject(${index})">
+                    <button class="btn btn-outline" style="color: var(--red); border-color: rgba(255, 94, 126, 0.2);" onclick="deleteProject('${proj.id}')">
                         Delete
                     </button>
                 </div>
@@ -1398,16 +1432,20 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     // Expose helpers globally for projects
-    window.activateProject = function(index) {
-        const proj = projectsList[index];
+    window.activateProject = function(projId) {
+        const proj = projectsList.find(p => p.id === projId);
+        if (!proj) return;
         activeProjectId = proj.id;
         localStorage.setItem(activeProjectIdKey, proj.id);
         populateProjectsList();
         checkActiveProject();
     };
 
-    window.editProject = function(index) {
-        const proj = projectsList[index];
+    window.editProject = function(projId) {
+        const proj = projectsList.find(p => p.id === projId);
+        if (!proj) return;
+        const index = projectsList.findIndex(p => p.id === projId);
+        
         modalTitle.textContent = "Edit Project";
         projectEditIndexInput.value = index;
         projectNameInput.value = proj.name;
@@ -1417,15 +1455,15 @@ document.addEventListener("DOMContentLoaded", () => {
         updateBackButtonVisibility();
     };
 
-    window.deleteProject = function(index) {
+    window.deleteProject = function(projId) {
+        const deletedProj = projectsList.find(p => p.id === projId);
+        if (!deletedProj) return;
+
         if (confirm("Are you sure you want to delete this project? This will disconnect its telemetry data dashboard.")) {
-            const deletedProj = projectsList[index];
-            if (deletedProj) {
-                // Find in allProjectsList
-                const globalIdx = allProjectsList.findIndex(p => p.id === deletedProj.id);
-                if (globalIdx !== -1) {
-                    allProjectsList.splice(globalIdx, 1);
-                }
+            // Find in allProjectsList
+            const globalIdx = allProjectsList.findIndex(p => p.id === deletedProj.id);
+            if (globalIdx !== -1) {
+                allProjectsList.splice(globalIdx, 1);
             }
             
             // If the deleted project was active, reset active project selection
@@ -1762,6 +1800,405 @@ document.addEventListener("DOMContentLoaded", () => {
             if (profileModal) profileModal.style.display = "none";
         });
     }
+
+    // --- PASSWORD VISIBILITY TOGGLE TOOL ---
+    function setupPasswordToggles() {
+        document.querySelectorAll(".toggle-password").forEach(icon => {
+            icon.onclick = (e) => {
+                e.preventDefault();
+                const targetId = icon.getAttribute("data-target");
+                const input = document.getElementById(targetId);
+                if (input) {
+                    if (input.type === "password") {
+                        input.type = "text";
+                        icon.classList.remove("mdi-eye-outline");
+                        icon.classList.add("mdi-eye-off-outline");
+                    } else {
+                        input.type = "password";
+                        icon.classList.remove("mdi-eye-off-outline");
+                        icon.classList.add("mdi-eye-outline");
+                    }
+                }
+            };
+        });
+    }
+
+    // --- PASSWORD RESET & VERIFICATION FLOW CONTROLLER ---
+    let activeResetEmail = "";
+    let approvalIntervalId = null;
+
+    function getResetRequests() {
+        const reqs = localStorage.getItem("axt_reset_requests");
+        if (reqs) {
+            try { return JSON.parse(reqs); } catch (e) {}
+        }
+        return {};
+    }
+
+    function saveResetRequests(reqs) {
+        localStorage.setItem("axt_reset_requests", JSON.stringify(reqs));
+    }
+
+    function pruneExpiredRequests() {
+        const reqs = getResetRequests();
+        const now = Date.now();
+        let changed = false;
+        for (const email in reqs) {
+            if (now - reqs[email].timestamp > 5 * 60 * 1000) { // 5 minutes expiry
+                delete reqs[email];
+                changed = true;
+            }
+        }
+        if (changed) {
+            saveResetRequests(reqs);
+        }
+    }
+
+    function setupPasswordResetFlow() {
+        setupPasswordToggles();
+
+        const loginCard = document.getElementById("login-card");
+        const forgotCard = document.getElementById("forgot-card");
+        const verifyCard = document.getElementById("verify-card");
+        const waitApprovalCard = document.getElementById("wait-approval-card");
+        const resetPasswordCard = document.getElementById("reset-password-card");
+
+        const toForgotPwdLink = document.getElementById("to-forgot-pwd");
+        const toLoginFromForgot = document.getElementById("to-login-from-forgot");
+        const toLoginFromVerify = document.getElementById("to-login-from-verify");
+        const cancelApprovalBtn = document.getElementById("cancel-approval-btn");
+
+        const forgotForm = document.getElementById("forgot-form");
+        const forgotEmailInput = document.getElementById("forgot-email");
+        const forgotModeSelect = document.getElementById("forgot-mode");
+        const forgotError = document.getElementById("forgot-error");
+
+        const verifyForm = document.getElementById("verify-form");
+        const verifyCodeInput = document.getElementById("verify-code");
+        const verifyError = document.getElementById("verify-error");
+        const verifySubtitle = document.getElementById("verify-subtitle");
+
+        const btnCheckApproval = document.getElementById("btn-check-approval");
+        const approvalTimeLeft = document.getElementById("approval-time-left");
+
+        const resetPasswordForm = document.getElementById("reset-password-form");
+        const resetOldPwdInput = document.getElementById("reset-old-password");
+        const resetNewPwdInput = document.getElementById("reset-new-password");
+        const resetConfirmPwdInput = document.getElementById("reset-confirm-password");
+        const resetPasswordError = document.getElementById("reset-password-error");
+
+        // Navigation toggles
+        if (toForgotPwdLink) {
+            toForgotPwdLink.onclick = (e) => {
+                e.preventDefault();
+                loginCard.classList.add("hidden");
+                forgotCard.classList.remove("hidden");
+                forgotForm.reset();
+                forgotError.textContent = "";
+            };
+        }
+
+        if (toLoginFromForgot) {
+            toLoginFromForgot.onclick = (e) => {
+                e.preventDefault();
+                forgotCard.classList.add("hidden");
+                loginCard.classList.remove("hidden");
+            };
+        }
+
+        if (toLoginFromVerify) {
+            toLoginFromVerify.onclick = (e) => {
+                e.preventDefault();
+                verifyCard.classList.add("hidden");
+                loginCard.classList.remove("hidden");
+            };
+        }
+
+        if (cancelApprovalBtn) {
+            cancelApprovalBtn.onclick = (e) => {
+                e.preventDefault();
+                if (approvalIntervalId) {
+                    clearInterval(approvalIntervalId);
+                    approvalIntervalId = null;
+                }
+                // Delete active request
+                if (activeResetEmail) {
+                    const reqs = getResetRequests();
+                    delete reqs[activeResetEmail];
+                    saveResetRequests(reqs);
+                }
+                waitApprovalCard.classList.add("hidden");
+                loginCard.classList.remove("hidden");
+            };
+        }
+
+        // 1. Submit Request to Recover Password
+        if (forgotForm) {
+            forgotForm.onsubmit = (e) => {
+                e.preventDefault();
+                forgotError.textContent = "";
+                pruneExpiredRequests();
+
+                const email = forgotEmailInput.value.trim().toLowerCase();
+                const mode = forgotModeSelect.value;
+
+                // Validate account exists
+                const admin = getAdminUser();
+                const users = getLocalUsers();
+                const accountExists = (email === admin.email.toLowerCase()) || users.some(u => u.email.toLowerCase() === email);
+
+                if (!accountExists) {
+                    forgotError.textContent = "Email này chưa được đăng ký trong hệ thống.";
+                    return;
+                }
+
+                // Generate random OTP
+                const code = Math.floor(1000 + Math.random() * 9000).toString();
+
+                const reqs = getResetRequests();
+                reqs[email] = {
+                    email: email,
+                    mode: mode,
+                    code: code,
+                    status: "pending",
+                    timestamp: Date.now()
+                };
+                saveResetRequests(reqs);
+                activeResetEmail = email;
+
+                // Sync admin approvals table if admin is logged in
+                if (typeof populateAdminApprovalsTable === "function") {
+                    populateAdminApprovalsTable();
+                }
+
+                if (mode === "code") {
+                    // Simulating sending Code to Email with prompt/alert
+                    alert(`[EMAIL SIMULATOR] Gửi tới ${email}:\nMã OTP xác nhận đổi mật khẩu của bạn là: ${code}\n(Mã có hiệu lực trong vòng 5 phút)`);
+                    
+                    forgotCard.classList.add("hidden");
+                    verifyCard.classList.remove("hidden");
+                    verifyCodeInput.value = "";
+                    verifyError.textContent = "";
+                    verifySubtitle.innerHTML = `Nhập mã OTP 4 số đã được gửi tới <strong>${email}</strong> (hiệu lực 5 phút)`;
+                } else {
+                    // Send to admin approval waiting room
+                    alert(`Yêu cầu đổi mật khẩu đã được chuyển tiếp đến Admin. Vui lòng liên hệ Admin phê duyệt trong vòng 5 phút.`);
+                    
+                    forgotCard.classList.add("hidden");
+                    waitApprovalCard.classList.remove("hidden");
+                    approvalTimeLeft.textContent = "Đang chờ Admin click phê duyệt trên hệ thống...";
+                    
+                    // Periodically poll for status updates
+                    if (approvalIntervalId) clearInterval(approvalIntervalId);
+                    approvalIntervalId = setInterval(() => {
+                        pruneExpiredRequests();
+                        const r = getResetRequests()[activeResetEmail];
+                        if (!r) {
+                            clearInterval(approvalIntervalId);
+                            approvalIntervalId = null;
+                            alert("Yêu cầu của bạn đã hết hạn hoặc bị hủy (quá 5 phút).");
+                            waitApprovalCard.classList.add("hidden");
+                            loginCard.classList.remove("hidden");
+                        } else if (r.status === "approved") {
+                            clearInterval(approvalIntervalId);
+                            approvalIntervalId = null;
+                            alert("Yêu cầu của bạn đã được Admin phê duyệt thành công!");
+                            waitApprovalCard.classList.add("hidden");
+                            resetPasswordCard.classList.remove("hidden");
+                            resetPasswordForm.reset();
+                            resetPasswordError.textContent = "";
+                        }
+                    }, 5000); // Poll every 5s
+                }
+            };
+        }
+
+        // 2. Submit OTP Code Verification
+        if (verifyForm) {
+            verifyForm.onsubmit = (e) => {
+                e.preventDefault();
+                verifyError.textContent = "";
+                pruneExpiredRequests();
+
+                const codeEntered = verifyCodeInput.value.trim();
+                const reqs = getResetRequests();
+                const r = reqs[activeResetEmail];
+
+                if (!r) {
+                    verifyError.textContent = "Yêu cầu đã hết hạn (quá 5 phút). Vui lòng gửi lại yêu cầu mới.";
+                    return;
+                }
+
+                if (r.code !== codeEntered) {
+                    verifyError.textContent = "Mã xác thực OTP không chính xác.";
+                    return;
+                }
+
+                // Authorized successfully! Move to reset page
+                verifyCard.classList.add("hidden");
+                resetPasswordCard.classList.remove("hidden");
+                resetPasswordForm.reset();
+                resetPasswordError.textContent = "";
+            };
+        }
+
+        // 3. Manual status check button
+        if (btnCheckApproval) {
+            btnCheckApproval.onclick = () => {
+                pruneExpiredRequests();
+                const r = getResetRequests()[activeResetEmail];
+                if (!r) {
+                    alert("Yêu cầu đã hết hạn hoặc không tồn tại. Vui lòng thử lại!");
+                    waitApprovalCard.classList.add("hidden");
+                    loginCard.classList.remove("hidden");
+                } else if (r.status === "approved") {
+                    if (approvalIntervalId) {
+                        clearInterval(approvalIntervalId);
+                        approvalIntervalId = null;
+                    }
+                    alert("Yêu cầu đã được phê duyệt!");
+                    waitApprovalCard.classList.add("hidden");
+                    resetPasswordCard.classList.remove("hidden");
+                    resetPasswordForm.reset();
+                    resetPasswordError.textContent = "";
+                } else {
+                    alert("Admin vẫn đang xử lý yêu cầu của bạn. Vui lòng đợi thêm hoặc báo Admin phê duyệt.");
+                }
+            };
+        }
+
+        // 4. Update Password Form
+        if (resetPasswordForm) {
+            resetPasswordForm.onsubmit = (e) => {
+                e.preventDefault();
+                resetPasswordError.textContent = "";
+                
+                const oldPwd = resetOldPwdInput.value;
+                const newPwd = resetNewPwdInput.value;
+                const confirmPwd = resetConfirmPwdInput.value;
+
+                if (newPwd !== confirmPwd) {
+                    resetPasswordError.textContent = "Xác nhận mật khẩu mới không khớp.";
+                    return;
+                }
+
+                if (newPwd.length < 4) {
+                    resetPasswordError.textContent = "Mật khẩu mới phải từ 4 ký tự trở lên.";
+                    return;
+                }
+
+                const admin = getAdminUser();
+                const users = getLocalUsers();
+
+                if (activeResetEmail === admin.email.toLowerCase()) {
+                    // Check old password
+                    if (admin.password !== oldPwd) {
+                        resetPasswordError.textContent = "Mật khẩu cũ của Admin không chính xác.";
+                        return;
+                    }
+                    // Update admin password
+                    admin.password = newPwd;
+                    localStorage.setItem("axt_admin", JSON.stringify(admin));
+                } else {
+                    // Standard user
+                    const uIdx = users.findIndex(u => u.email.toLowerCase() === activeResetEmail);
+                    if (uIdx !== -1) {
+                        if (users[uIdx].password !== oldPwd) {
+                            resetPasswordError.textContent = "Mật khẩu cũ không chính xác.";
+                            return;
+                        }
+                        users[uIdx].password = newPwd;
+                        localStorage.setItem("axt_users", JSON.stringify(users));
+                    } else {
+                        resetPasswordError.textContent = "Lỗi hệ thống: Không tìm thấy tài khoản.";
+                        return;
+                    }
+                }
+
+                // Delete request
+                const reqs = getResetRequests();
+                delete reqs[activeResetEmail];
+                saveResetRequests(reqs);
+
+                alert("Chúc mừng! Mật khẩu tài khoản đã được đặt lại thành công. Vui lòng đăng nhập.");
+                resetPasswordCard.classList.add("hidden");
+                loginCard.classList.remove("hidden");
+            };
+        }
+    }
+
+    // --- ADMIN APPROVAL CENTER HANDLERS ---
+    window.populateAdminApprovalsTable = function() {
+        const tbody = document.getElementById("admin-approvals-table-body");
+        if (!tbody) return;
+        tbody.innerHTML = "";
+        
+        pruneExpiredRequests();
+        const reqs = getResetRequests();
+        const emails = Object.keys(reqs).filter(email => reqs[email].mode === "admin");
+
+        if (emails.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">Không có yêu cầu phê duyệt đổi mật khẩu nào đang chờ.</td></tr>`;
+            return;
+        }
+
+        emails.forEach(email => {
+            const req = reqs[email];
+            const tr = document.createElement("tr");
+
+            // Calculate countdown
+            const elapsed = Date.now() - req.timestamp;
+            const remainingSec = Math.max(0, Math.floor((5 * 60 * 1000 - elapsed) / 1000));
+            const min = Math.floor(remainingSec / 60);
+            const sec = remainingSec % 60;
+            const timeStr = `${min} phút ${sec} giây`;
+
+            const date = new Date(req.timestamp);
+            const requestedTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+            tr.innerHTML = `
+                <td><strong>${req.email}</strong></td>
+                <td>${requestedTime}</td>
+                <td><span class="badge ${remainingSec < 60 ? 'badge-low' : ''}" style="color: var(--primary); border-color: rgba(0, 242, 254, 0.2); background: rgba(0, 242, 254, 0.05);">${timeStr}</span></td>
+                <td style="text-align: center;">
+                    ${req.status === 'approved' ? 
+                        `<span style="color: var(--green); font-weight: 600; font-size: 13px;"><span class="mdi mdi-check-circle-outline"></span> Đã phê duyệt</span>` :
+                        `<button class="btn btn-outline" style="padding: 6px 12px; border-color: var(--green); color: var(--green); margin-right: 5px;" onclick="approveResetRequest('${req.email}')">Đồng ý</button>
+                         <button class="btn btn-outline" style="padding: 6px 12px; border-color: var(--red); color: var(--red);" onclick="rejectResetRequest('${req.email}')">Từ chối</button>`
+                    }
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    };
+
+    window.approveResetRequest = function(email) {
+        const reqs = getResetRequests();
+        if (reqs[email]) {
+            reqs[email].status = "approved";
+            saveResetRequests(reqs);
+            populateAdminApprovalsTable();
+            alert(`Đã phê duyệt yêu cầu đổi mật khẩu của tài khoản ${email}.`);
+        }
+    };
+
+    window.rejectResetRequest = function(email) {
+        const reqs = getResetRequests();
+        if (reqs[email]) {
+            delete reqs[email];
+            saveResetRequests(reqs);
+            populateAdminApprovalsTable();
+            alert(`Đã từ chối yêu cầu đổi mật khẩu của tài khoản ${email}.`);
+        }
+    };
+
+    // Auto-update countdown every 10 seconds for admin panel approvals
+    setInterval(() => {
+        const activeTab = document.getElementById("users-tab");
+        if (activeTab && activeTab.classList.contains("active")) {
+            populateAdminApprovalsTable();
+        }
+    }, 10000);
 
     // --- FLOATING CHAT WIDGET CONTROLLER ---
     let selectedThreadUser = null;
@@ -2141,5 +2578,6 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     // --- Start App ---
+    setupPasswordResetFlow();
     // Initialization is completely handled by the authentication check on load
 });

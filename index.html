@@ -38,10 +38,14 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label for="login-password">Password</label>
-                    <div class="input-wrap">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                        <label for="login-password" style="margin: 0;">Password</label>
+                        <a href="#" id="to-forgot-pwd" style="font-size: 11px; color: var(--primary); text-decoration: none; font-weight: 600;">Quên mật khẩu?</a>
+                    </div>
+                    <div class="input-wrap" style="position: relative;">
                         <span class="mdi mdi-lock-outline"></span>
-                        <input type="password" id="login-password" required placeholder="••••••••">
+                        <input type="password" id="login-password" required placeholder="••••••••" style="padding-right: 40px;">
+                        <span class="mdi mdi-eye-outline toggle-password" data-target="login-password" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 16px;"></span>
                     </div>
                 </div>
                 <div class="remember-group" style="display: flex; align-items: center; gap: 8px; margin-top: 10px; margin-bottom: 15px;">
@@ -82,16 +86,18 @@
                 </div>
                 <div class="form-group">
                     <label for="register-password">Password</label>
-                    <div class="input-wrap">
+                    <div class="input-wrap" style="position: relative;">
                         <span class="mdi mdi-lock-outline"></span>
-                        <input type="password" id="register-password" required placeholder="••••••••">
+                        <input type="password" id="register-password" required placeholder="••••••••" style="padding-right: 40px;">
+                        <span class="mdi mdi-eye-outline toggle-password" data-target="register-password" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 16px;"></span>
                     </div>
                 </div>
                 <div class="form-group">
                     <label for="register-confirm">Confirm Password</label>
-                    <div class="input-wrap">
+                    <div class="input-wrap" style="position: relative;">
                         <span class="mdi mdi-lock-check-outline"></span>
-                        <input type="password" id="register-confirm" required placeholder="••••••••">
+                        <input type="password" id="register-confirm" required placeholder="••••••••" style="padding-right: 40px;">
+                        <span class="mdi mdi-eye-outline toggle-password" data-target="register-confirm" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 16px;"></span>
                     </div>
                 </div>
                 <div class="error-msg" id="register-error"></div>
@@ -101,7 +107,119 @@
                 <p>Already have an account? <a href="#" id="to-login">Log in here</a></p>
             </div>
         </div>
-    </div>
+
+        <!-- Forgot Password Card -->
+        <div class="auth-card hidden" id="forgot-card">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <span class="mdi mdi-lock-reset"></span>
+                </div>
+                <h2>Khôi phục mật khẩu</h2>
+                <p>Chọn phương thức xác thực để đặt lại mật khẩu</p>
+            </div>
+            <form id="forgot-form">
+                <div class="form-group">
+                    <label for="forgot-email">Email Address</label>
+                    <div class="input-wrap">
+                        <span class="mdi mdi-email-outline"></span>
+                        <input type="email" id="forgot-email" required placeholder="name@company.com">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="forgot-mode">Phương thức xác thực</label>
+                    <select id="forgot-mode" style="background: var(--bg-dark-card); border: 1px solid var(--border-glow); border-radius: 8px; color: var(--text-primary); padding: 10px 12px; outline: none; font-size: 13px; cursor: pointer; width: 100%;">
+                        <option value="code">Xác thực mã 4 số qua Email (OTP)</option>
+                        <option value="admin">Gửi yêu cầu phê duyệt tới Admin</option>
+                    </select>
+                </div>
+                <div class="error-msg" id="forgot-error"></div>
+                <button type="submit" class="btn btn-primary btn-block">Gửi yêu cầu</button>
+            </form>
+            <div class="auth-footer">
+                <p>Quay lại <a href="#" id="to-login-from-forgot">Đăng nhập</a></p>
+            </div>
+        </div>
+
+        <!-- OTP Verification Card -->
+        <div class="auth-card hidden" id="verify-card">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <span class="mdi mdi-shield-key-outline"></span>
+                </div>
+                <h2>Xác thực mã OTP</h2>
+                <p id="verify-subtitle">Nhập mã 4 số đã được gửi tới email của bạn (Hiệu lực trong 5 phút)</p>
+            </div>
+            <form id="verify-form">
+                <div class="form-group">
+                    <label for="verify-code">Mã OTP (4 chữ số)</label>
+                    <div class="input-wrap">
+                        <span class="mdi mdi-numeric" style="font-size: 20px;"></span>
+                        <input type="text" id="verify-code" required placeholder="1234" maxlength="4" style="letter-spacing: 5px; text-align: center; font-size: 20px; font-weight: 700; padding-left: 20px;">
+                    </div>
+                </div>
+                <div class="error-msg" id="verify-error"></div>
+                <button type="submit" class="btn btn-primary btn-block">Xác nhận mã</button>
+            </form>
+            <div class="auth-footer">
+                <p>Không nhận được mã? <a href="#" id="to-login-from-verify">Quay lại đăng nhập</a></p>
+            </div>
+        </div>
+
+        <!-- Wait Admin Approval Card -->
+        <div class="auth-card hidden" id="wait-approval-card">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <span class="mdi mdi-clock-outline"></span>
+                </div>
+                <h2>Chờ phê duyệt</h2>
+                <p>Yêu cầu khôi phục mật khẩu đã được gửi đến Admin. Vui lòng giữ cửa sổ này và đợi Admin phê duyệt (Hiệu lực trong 5 phút).</p>
+            </div>
+            <div style="text-align: center; margin: 20px 0;">
+                <span class="mdi mdi-loading mdi-spin" style="font-size: 36px; color: var(--primary); display: inline-block; margin-bottom: 10px;"></span>
+                <div style="font-size: 13px; color: var(--text-secondary);" id="approval-time-left">Mã yêu cầu đang chờ xử lý...</div>
+            </div>
+            <button class="btn btn-primary btn-block" id="btn-check-approval" style="margin-bottom: 10px;">Kiểm tra trạng thái phê duyệt</button>
+            <button class="btn btn-outline btn-block" id="cancel-approval-btn" style="color: var(--red); border-color: rgba(255, 94, 126, 0.2);">Hủy yêu cầu & Quay lại</button>
+        </div>
+
+        <!-- Reset Password Card -->
+        <div class="auth-card hidden" id="reset-password-card">
+            <div class="auth-header">
+                <div class="auth-logo">
+                    <span class="mdi mdi-key-change"></span>
+                </div>
+                <h2>Đặt lại mật khẩu</h2>
+                <p>Thiết lập mật khẩu mới cho tài khoản của bạn</p>
+            </div>
+            <form id="reset-password-form">
+                <div class="form-group">
+                    <label for="reset-old-password">Mật khẩu cũ</label>
+                    <div class="input-wrap" style="position: relative;">
+                        <span class="mdi mdi-lock-outline"></span>
+                        <input type="password" id="reset-old-password" required placeholder="••••••••" style="padding-right: 40px;">
+                        <span class="mdi mdi-eye-outline toggle-password" data-target="reset-old-password" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 16px;"></span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="reset-new-password">Mật khẩu mới</label>
+                    <div class="input-wrap" style="position: relative;">
+                        <span class="mdi mdi-lock-outline"></span>
+                        <input type="password" id="reset-new-password" required placeholder="••••••••" style="padding-right: 40px;">
+                        <span class="mdi mdi-eye-outline toggle-password" data-target="reset-new-password" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 16px;"></span>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="reset-confirm-password">Xác nhận mật khẩu mới</label>
+                    <div class="input-wrap" style="position: relative;">
+                        <span class="mdi mdi-lock-check-outline"></span>
+                        <input type="password" id="reset-confirm-password" required placeholder="••••••••" style="padding-right: 40px;">
+                        <span class="mdi mdi-eye-outline toggle-password" data-target="reset-confirm-password" style="position: absolute; right: 14px; top: 50%; transform: translateY(-50%); cursor: pointer; color: var(--text-muted); font-size: 16px;"></span>
+                    </div>
+                </div>
+                <div class="error-msg" id="reset-password-error"></div>
+                <button type="submit" class="btn btn-primary btn-block">Cập nhật mật khẩu</button>
+            </form>
+        </div>
 
     <div class="app-container" style="display: none;">
         
@@ -555,6 +673,31 @@
                                 <!-- Dynamic user list -->
                             </tbody>
                         </table>
+                    </div>
+                    
+                    <!-- Password Reset Approval Box -->
+                    <div class="logs-card" style="margin-top: 25px;" id="admin-reset-approvals-card">
+                        <div class="card-header logs-header">
+                            <div>
+                                <h3>Yêu cầu Đổi Mật khẩu đang chờ duyệt</h3>
+                                <span class="card-subtitle">Phê duyệt hoặc từ chối yêu cầu đặt lại mật khẩu của người dùng (Thời hạn 5 phút)</span>
+                            </div>
+                        </div>
+                        <div class="table-container">
+                            <table class="logs-table">
+                                <thead>
+                                    <tr>
+                                        <th>Email tài khoản</th>
+                                        <th>Thời gian gửi</th>
+                                        <th>Thời gian còn lại</th>
+                                        <th style="width: 220px; text-align: center;">Hành động</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="admin-approvals-table-body">
+                                    <!-- Dynamic approval rows -->
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
             </section>
