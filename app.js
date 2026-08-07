@@ -239,6 +239,13 @@ document.addEventListener("DOMContentLoaded", () => {
         
         const navUsers = document.getElementById("nav-users");
         if (navUsers) navUsers.style.display = "none";
+
+        const chatWidget = document.getElementById("chat-widget");
+        if (chatWidget) {
+            chatWidget.style.display = "none";
+            const chatWindow = document.getElementById("chat-window");
+            if (chatWindow) chatWindow.style.display = "none";
+        }
     }
 
     function loginSuccess(user) {
@@ -276,6 +283,23 @@ document.addEventListener("DOMContentLoaded", () => {
         // Load projects list and check active status
         loadProjectsList();
         checkActiveProject();
+
+        const chatWidget = document.getElementById("chat-widget");
+        if (chatWidget) {
+            chatWidget.style.display = "block";
+            if (typeof initChatWidget === "function") initChatWidget();
+        }
+    }
+
+    function getFailedAttempts() {
+        const attemptsJSON = localStorage.getItem("axt_failed_attempts");
+        if (attemptsJSON) {
+            try { return JSON.parse(attemptsJSON); } catch (e) {}
+        }
+        return {};
+    }
+    function saveFailedAttempts(attempts) {
+        localStorage.setItem("axt_failed_attempts", JSON.stringify(attempts));
     }
 
     // Handle Login Submit
@@ -287,33 +311,55 @@ document.addEventListener("DOMContentLoaded", () => {
         const password = loginPasswordInput.value;
         const remember = loginRememberInput ? loginRememberInput.checked : false;
         
-        // 1. Check default admin
-        const admin = getAdminUser();
-        if (email === admin.email.toLowerCase() && password === admin.password) {
-            const user = { name: admin.name, email: admin.email, isAdmin: true };
-            if (remember) {
-                localStorage.setItem("axt_current_user", JSON.stringify(user));
-            } else {
-                sessionStorage.setItem("axt_current_user", JSON.stringify(user));
-            }
-            loginSuccess(user);
+        const attempts = getFailedAttempts();
+        const currentAttempts = attempts[email] || 0;
+
+        if (currentAttempts >= 5) {
+            alert(`Cảnh báo: Tài khoản ${email} đã cố đăng nhập sai ${currentAttempts} lần! Vui lòng liên hệ Admin để được hỗ trợ.`);
+            loginError.textContent = `Tài khoản đã đăng nhập sai quá 5 lần. Vui lòng liên hệ Admin.`;
             return;
         }
-        
-        // 2. Check local registered users
-        const users = getLocalUsers();
-        const matchedUser = users.find(u => u.email === email && u.password === password);
-        
-        if (matchedUser) {
-            const user = { name: matchedUser.name, email: matchedUser.email };
-            if (remember) {
-                localStorage.setItem("axt_current_user", JSON.stringify(user));
-            } else {
-                sessionStorage.setItem("axt_current_user", JSON.stringify(user));
-            }
-            loginSuccess(user);
+
+        // 1. Check default admin
+        const admin = getAdminUser();
+        let success = false;
+        let loggedInUser = null;
+
+        if (email === admin.email.toLowerCase() && password === admin.password) {
+            loggedInUser = { name: admin.name, email: admin.email, isAdmin: true };
+            success = true;
         } else {
-            loginError.textContent = "Invalid email or password.";
+            // 2. Check local registered users
+            const users = getLocalUsers();
+            const matchedUser = users.find(u => u.email === email && u.password === password);
+            if (matchedUser) {
+                loggedInUser = { name: matchedUser.name, email: matchedUser.email };
+                success = true;
+            }
+        }
+
+        if (success) {
+            // Clear attempts on success
+            attempts[email] = 0;
+            saveFailedAttempts(attempts);
+
+            if (remember) {
+                localStorage.setItem("axt_current_user", JSON.stringify(loggedInUser));
+            } else {
+                sessionStorage.setItem("axt_current_user", JSON.stringify(loggedInUser));
+            }
+            loginSuccess(loggedInUser);
+        } else {
+            // Increment failed attempts
+            attempts[email] = (attempts[email] || 0) + 1;
+            saveFailedAttempts(attempts);
+
+            if (attempts[email] >= 5) {
+                alert(`Cảnh báo: Tài khoản ${email} đã cố đăng nhập sai ${attempts[email]} lần liên tiếp nhưng không thành công!`);
+                loginError.textContent = `Tài khoản đã đăng nhập sai quá 5 lần. Vui lòng liên hệ Admin.`;
+            } else {
+                loginError.textContent = `Email hoặc mật khẩu không chính xác. (Đã sai ${attempts[email]}/5 lần)`;
+            }
         }
     });
 
@@ -1716,6 +1762,383 @@ document.addEventListener("DOMContentLoaded", () => {
             if (profileModal) profileModal.style.display = "none";
         });
     }
+
+    // --- FLOATING CHAT WIDGET CONTROLLER ---
+    let selectedThreadUser = null;
+    let chatUnreadCount = 0;
+
+    function getChatMessages() {
+        const msgs = localStorage.getItem("axt_chat_messages");
+        if (msgs) {
+            try { return JSON.parse(msgs); } catch(e) {}
+        }
+        return [];
+    }
+
+    function saveChatMessages(msgs) {
+        localStorage.setItem("axt_chat_messages", JSON.stringify(msgs));
+    }
+
+    window.initChatWidget = function() {
+        const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
+        if (!savedUser) return;
+        const currentUser = JSON.parse(savedUser);
+        const admin = getAdminUser();
+        const isAdmin = currentUser.email.toLowerCase() === admin.email.toLowerCase();
+
+        const chatWindow = document.getElementById("chat-window");
+        const chatTriggerBtn = document.getElementById("chat-trigger-btn");
+        const chatBadge = document.getElementById("chat-badge");
+        const chatMinimizeBtn = document.getElementById("chat-minimize-btn");
+        const chatAdminConfig = document.getElementById("chat-admin-config");
+        const aiModeSelect = document.getElementById("ai-mode-select");
+        const chatThreadsPane = document.getElementById("chat-threads-pane");
+        const chatThreadsList = document.getElementById("chat-threads-list");
+        const chatMessagesPane = document.getElementById("chat-messages-pane");
+        const chatMessagesScroll = document.getElementById("chat-messages-scroll");
+        const chatSuggestions = document.getElementById("chat-suggestions");
+        const chatInputForm = document.getElementById("chat-input-form");
+        const chatMessageInput = document.getElementById("chat-message-input");
+        const chatBackThreadsBtn = document.getElementById("chat-back-threads-btn");
+        const chatWindowTitle = document.getElementById("chat-window-title");
+        const chatWindowStatus = document.getElementById("chat-window-status");
+        const chatAvatarIcon = document.getElementById("chat-avatar-icon");
+
+        // Load messages database
+        let messages = getChatMessages();
+
+        // Load AI settings
+        let aiMode = localStorage.getItem("axt_ai_mode") || "ON";
+        if (aiModeSelect) aiModeSelect.value = aiMode;
+
+        // Toggle chat window visibility
+        chatTriggerBtn.onclick = (e) => {
+            e.stopPropagation();
+            if (chatWindow.style.display === "none") {
+                chatWindow.style.display = "flex";
+                chatTriggerBtn.querySelector(".chat-icon").style.display = "none";
+                chatTriggerBtn.querySelector(".close-icon").style.display = "block";
+                chatUnreadCount = 0;
+                chatBadge.style.display = "none";
+                chatBadge.textContent = "0";
+                
+                // If standard user, seed greeting
+                if (!isAdmin) {
+                    seedUserGreeting(currentUser);
+                }
+                renderChatContent();
+            } else {
+                closeChatWindow();
+            }
+        };
+
+        chatMinimizeBtn.onclick = (e) => {
+            e.stopPropagation();
+            closeChatWindow();
+        };
+
+        function closeChatWindow() {
+            chatWindow.style.display = "none";
+            chatTriggerBtn.querySelector(".chat-icon").style.display = "block";
+            chatTriggerBtn.querySelector(".close-icon").style.display = "none";
+        }
+
+        // Handle AI select settings
+        if (aiModeSelect) {
+            aiModeSelect.onchange = () => {
+                aiMode = aiModeSelect.value;
+                localStorage.setItem("axt_ai_mode", aiMode);
+                updateAIStatusDisplay();
+                
+                // Refresh suggestions view based on new AI Mode
+                if (!isAdmin) {
+                    if (aiMode === "ON") {
+                        chatSuggestions.style.display = "flex";
+                        renderSuggestionsChips();
+                    } else {
+                        chatSuggestions.style.display = "none";
+                    }
+                }
+            };
+        }
+
+        function updateAIStatusDisplay() {
+            if (isAdmin) {
+                chatWindowTitle.textContent = "Admin Chat Center";
+                chatWindowStatus.innerHTML = `<span class="status-dot online"></span>Trực tuyến (AI: ${aiMode})`;
+                chatAvatarIcon.className = "mdi mdi-shield-account-outline";
+            } else {
+                if (aiMode === "ON") {
+                    chatWindowTitle.textContent = "AI Assistant";
+                    chatWindowStatus.innerHTML = `<span class="status-dot online"></span>Trực tuyến`;
+                    chatAvatarIcon.className = "mdi mdi-robot-outline";
+                } else if (aiMode === "AWAY") {
+                    chatWindowTitle.textContent = "AI Assistant (Away)";
+                    chatWindowStatus.innerHTML = `<span class="status-dot away"></span>Vắng mặt`;
+                    chatAvatarIcon.className = "mdi mdi-robot-off-outline";
+                } else {
+                    chatWindowTitle.textContent = "LinhBeo Admin Support";
+                    chatWindowStatus.innerHTML = `<span class="status-dot away"></span>Chờ phản hồi`;
+                    chatAvatarIcon.className = "mdi mdi-account-outline";
+                }
+            }
+        }
+
+        function seedUserGreeting(user) {
+            messages = getChatMessages();
+            const userMsgs = messages.filter(m => m.from === user.email || m.to === user.email);
+            if (userMsgs.length === 0) {
+                // Initial message
+                const newMsg = {
+                    id: "greeting_" + Date.now(),
+                    from: "ai",
+                    to: user.email,
+                    text: `Xin chào ${user.name}! Mình là Trợ lý AI của LinhBeo Weather. Mình có thể giúp gì cho bạn hôm nay?`,
+                    timestamp: new Date().toISOString(),
+                    senderName: "AI Assistant",
+                    isRead: true
+                };
+                messages.push(newMsg);
+                saveChatMessages(messages);
+            }
+        }
+
+        function renderChatContent() {
+            messages = getChatMessages();
+            updateAIStatusDisplay();
+
+            if (isAdmin) {
+                chatAdminConfig.style.display = "flex";
+                if (!selectedThreadUser) {
+                    // Show thread selector pane
+                    chatThreadsPane.style.display = "block";
+                    chatMessagesPane.style.display = "none";
+                    chatSuggestions.style.display = "none";
+                    chatBackThreadsBtn.style.display = "none";
+                    renderThreadsList();
+                } else {
+                    // Show conversation with the selected user
+                    chatThreadsPane.style.display = "none";
+                    chatMessagesPane.style.display = "flex";
+                    chatSuggestions.style.display = "none";
+                    chatBackThreadsBtn.style.display = "flex";
+                    
+                    // Mark messages in this thread as read
+                    messages.forEach(m => {
+                        if (m.from === selectedThreadUser && m.to === admin.email) {
+                            m.isRead = true;
+                        }
+                    });
+                    saveChatMessages(messages);
+                    
+                    renderMessages(selectedThreadUser);
+                }
+            } else {
+                // Standard user
+                chatAdminConfig.style.display = "none";
+                chatThreadsPane.style.display = "none";
+                chatMessagesPane.style.display = "flex";
+                chatBackThreadsBtn.style.display = "none";
+                
+                if (aiMode === "ON") {
+                    chatSuggestions.style.display = "flex";
+                    renderSuggestionsChips();
+                } else {
+                    chatSuggestions.style.display = "none";
+                }
+                
+                renderMessages(currentUser.email);
+            }
+        }
+
+        chatBackThreadsBtn.onclick = () => {
+            selectedThreadUser = null;
+            renderChatContent();
+        };
+
+        function renderThreadsList() {
+            chatThreadsList.innerHTML = "";
+            messages = getChatMessages();
+            
+            // Get unique standard user emails
+            const userEmails = [...new Set(messages.map(m => m.from === admin.email ? m.to : m.from))].filter(email => email !== admin.email && email !== "ai");
+            
+            if (userEmails.length === 0) {
+                chatThreadsList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: 13px;">Chưa có cuộc hội thoại nào.</div>`;
+                return;
+            }
+
+            // Find names of users
+            const usersDb = getLocalUsers();
+            
+            userEmails.forEach(email => {
+                const u = usersDb.find(x => x.email.toLowerCase() === email.toLowerCase()) || { name: email.split("@")[0] };
+                const userThreadMsgs = messages.filter(m => (m.from === email && m.to === admin.email) || (m.from === admin.email && m.to === email));
+                const unreadCount = userThreadMsgs.filter(m => m.from === email && !m.isRead).length;
+                
+                const item = document.createElement("div");
+                item.className = "chat-thread-item";
+                item.onclick = () => {
+                    selectedThreadUser = email;
+                    renderChatContent();
+                };
+                
+                item.innerHTML = `
+                    <div class="thread-item-info">
+                        <div class="thread-avatar">${u.name.charAt(0).toUpperCase()}</div>
+                        <div class="thread-name">${u.name}</div>
+                    </div>
+                    ${unreadCount > 0 ? `<div class="thread-unread-badge">${unreadCount}</div>` : ""}
+                `;
+                chatThreadsList.appendChild(item);
+            });
+        }
+
+        function renderMessages(userEmail) {
+            chatMessagesScroll.innerHTML = "";
+            messages = getChatMessages();
+            
+            const threadMsgs = messages.filter(m => 
+                (m.from === userEmail && m.to === admin.email) || 
+                (m.from === admin.email && m.to === userEmail) ||
+                (m.from === "ai" && m.to === userEmail)
+            );
+
+            threadMsgs.forEach(m => {
+                const isSent = isAdmin ? (m.from === admin.email) : (m.from === currentUser.email);
+                const bubble = document.createElement("div");
+                bubble.className = `chat-bubble ${isSent ? "sent" : "received"}`;
+                
+                let sender = m.senderName;
+                if (m.from === "ai") sender = "AI Assistant";
+
+                // Format timestamp
+                const date = new Date(m.timestamp);
+                const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+                bubble.innerHTML = `
+                    <span class="bubble-sender">${sender}</span>
+                    <div class="bubble-content">${m.text}</div>
+                    <span class="bubble-time">${timeStr}</span>
+                `;
+                chatMessagesScroll.appendChild(bubble);
+            });
+
+            // Scroll to bottom
+            setTimeout(() => {
+                chatMessagesScroll.scrollTop = chatMessagesScroll.scrollHeight;
+            }, 50);
+        }
+
+        function renderSuggestionsChips() {
+            chatSuggestions.innerHTML = "";
+            const chips = [
+                "Thiết bị đo thông số gì?",
+                "Xem tọa độ GPS thiết bị",
+                "Cách xuất dữ liệu CSV",
+                "Làm sao sửa thông tin cá nhân?"
+            ];
+
+            chips.forEach(text => {
+                const chip = document.createElement("div");
+                chip.className = "suggestion-chip";
+                chip.textContent = text;
+                chip.onclick = () => {
+                    sendMessage(text);
+                };
+                chatSuggestions.appendChild(chip);
+            });
+        }
+
+        // Handle sending messages
+        chatInputForm.onsubmit = (e) => {
+            e.preventDefault();
+            const text = chatMessageInput.value.trim();
+            if (!text) return;
+            chatMessageInput.value = "";
+            sendMessage(text);
+        };
+
+        function sendMessage(text) {
+            messages = getChatMessages();
+            const timestamp = new Date().toISOString();
+            
+            // 1. Create message from user
+            const fromEmail = isAdmin ? admin.email : currentUser.email;
+            const toEmail = isAdmin ? selectedThreadUser : admin.email;
+            const senderName = isAdmin ? admin.name : currentUser.name;
+
+            const newMsg = {
+                id: "msg_" + Date.now(),
+                from: fromEmail,
+                to: toEmail,
+                text: text,
+                timestamp: timestamp,
+                senderName: senderName,
+                isRead: false
+            };
+
+            messages.push(newMsg);
+            saveChatMessages(messages);
+            renderMessages(isAdmin ? selectedThreadUser : currentUser.email);
+
+            // 2. Handle AI automatic replies if sending to admin and we are not admin
+            if (!isAdmin) {
+                handleAIReply(text, currentUser.email);
+            }
+        }
+
+        function handleAIReply(userText, userEmail) {
+            messages = getChatMessages();
+            const timestamp = new Date().toISOString();
+            
+            let replyText = "";
+            if (aiMode === "AWAY") {
+                replyText = "Admin hiện đang vắng mặt. Vui lòng đợi đến khi Admin online để được tư vấn trực tiếp.";
+            } else if (aiMode === "ON") {
+                const cleanText = userText.toLowerCase();
+                const activeProj = projectsList.find(p => p.id === activeProjectId) || { name: "Mặc định", deviceId: "device_A23", latitude: 10.762622, longitude: 106.660172 };
+
+                if (cleanText.includes("đo") || cleanText.includes("thông số") || cleanText.includes("tính năng") || cleanText.includes("thiết bị") || cleanText.includes("chức năng")) {
+                    replyText = `Dự án hiện tại của bạn là **${activeProj.name}** đang chạy Thiết bị **${activeProj.deviceId || 'device_A23'}** tại tọa độ GPS: **${activeProj.latitude.toFixed(4)}, ${activeProj.longitude.toFixed(4)}**. Thiết bị này đo đạc các chỉ số: Nhiệt độ (°C), Độ ẩm (%), Lượng mưa (mm), Tốc độ gió (km/h), Bức xạ UV và Bức xạ mặt trời (W/m²).`;
+                } else if (cleanText.includes("vị trí") || cleanText.includes("gps") || cleanText.includes("tọa độ") || cleanText.includes("địa điểm") || cleanText.includes("hồ chí minh") || cleanText.includes("hcm")) {
+                    replyText = `Thiết bị của dự án **${activeProj.name}** hiện đang được định vị tại khu vực TP. Hồ Chí Minh với tọa độ GPS chính xác là: Latitude **${activeProj.latitude.toFixed(4)}**, Longitude **${activeProj.longitude.toFixed(4)}**.`;
+                } else if (cleanText.includes("xuất") || cleanText.includes("tải") || cleanText.includes("download") || cleanText.includes("csv") || cleanText.includes("excel") || cleanText.includes("lịch sử") || cleanText.includes("nhật ký") || cleanText.includes("log")) {
+                    replyText = "Để tải về lịch sử đo đạc, bạn hãy chuyển sang tab **Telemetry Logs** (hoặc truy cập đường dẫn #logs), chọn khoảng thời gian mong muốn rồi nhấn nút **Export CSV** hoặc **Export Excel** ở phía trên bảng ghi chép dữ liệu.";
+                } else if (cleanText.includes("đổi mật khẩu") || cleanText.includes("mật khẩu") || cleanText.includes("tài khoản") || cleanText.includes("cá nhân") || cleanText.includes("profile") || cleanText.includes("sửa thông tin")) {
+                    replyText = "Bạn có thể tự chỉnh sửa thông tin cá nhân (Tên, Email, Mật khẩu) của mình bằng cách bấm trực tiếp vào thẻ thông tin tài khoản hiển thị ở dưới cùng thanh Sidebar bên trái.";
+                } else if (cleanText.includes("thêm dự án") || cleanText.includes("thêm thiết bị") || cleanText.includes("dự án mới") || cleanText.includes("quản lý")) {
+                    replyText = "Bạn có thể quản lý và đăng ký thiết bị mới tại tab **Manage Projects** (#projects). Hãy click vào nút **Add Project**, nhập tên dự án và mã ID thiết bị của bạn.";
+                } else if (cleanText.includes("chào") || cleanText.includes("hello") || cleanText.includes("hi") || cleanText.includes("xin chào")) {
+                    replyText = `Xin chào ${currentUser.name}! Mình là Trợ lý AI, mình có thể giúp bạn giải đáp các thông tin về hoạt động thiết bị, thông số đo đạc, tọa độ GPS hoặc cách sử dụng trang web.`;
+                } else {
+                    replyText = "Cảm ơn câu hỏi của bạn! Mình là Trợ lý AI. Bạn có thể hỏi mình các câu hỏi về: tính năng thiết bị, vị trí GPS dự án, cách xuất file CSV, hay chỉnh sửa tài khoản cá nhân. Nếu bạn cần gặp trực tiếp Admin, vui lòng để lại lời nhắn, Admin sẽ rep lại bạn ngay khi online nhé!";
+                }
+            }
+
+            if (replyText) {
+                // Add AI reply message after a slight delay for realistic chat feel
+                setTimeout(() => {
+                    messages = getChatMessages();
+                    const aiMsg = {
+                        id: "ai_" + Date.now(),
+                        from: "ai",
+                        to: userEmail,
+                        text: replyText,
+                        timestamp: new Date().toISOString(),
+                        senderName: "AI Assistant",
+                        isRead: true
+                    };
+                    messages.push(aiMsg);
+                    saveChatMessages(messages);
+                    
+                    if (chatWindow.style.display === "flex") {
+                        renderMessages(userEmail);
+                    }
+                }, 600);
+            }
+        }
+    };
 
     // --- Start App ---
     // Initialization is completely handled by the authentication check on load

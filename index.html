@@ -562,14 +562,20 @@
             <!-- Project Management Tab -->
             <section id="projects-tab" class="tab-content">
                 <div class="logs-card">
-                    <div class="card-header logs-header">
+                    <div class="card-header logs-header" style="flex-wrap: wrap; gap: 15px;">
                         <div>
                             <h3>Project Directory Management</h3>
                             <span class="card-subtitle">Add, edit, or remove your measurement projects</span>
                         </div>
-                        <button class="btn btn-primary" id="btn-add-project">
-                            <span class="mdi mdi-plus"></span> Add Project
-                        </button>
+                        <div style="display: flex; gap: 10px; align-items: center; margin-left: auto;">
+                            <div class="input-wrap" style="width: 240px; margin: 0; position: relative;">
+                                <span class="mdi mdi-magnify" style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 16px;"></span>
+                                <input type="text" id="project-search-input" placeholder="Tìm kiếm dự án..." style="padding: 8px 12px 8px 36px; border-radius: 8px; border: 1px solid var(--border-glow); background: rgba(255, 255, 255, 0.03); color: var(--text-primary); font-size: 13px; outline: none; width: 100%;">
+                            </div>
+                            <button class="btn btn-primary" id="btn-add-project">
+                                <span class="mdi mdi-plus"></span> Add Project
+                            </button>
+                        </div>
                     </div>
                     
                     <div class="projects-list-container">
@@ -706,6 +712,81 @@
         </div>
     </div>
     
+    <!-- Floating Chat Widget -->
+    <div id="chat-widget" class="chat-widget" style="display: none;">
+        <!-- Floating Button -->
+        <button id="chat-trigger-btn" class="chat-trigger-btn" title="Hỗ trợ & AI Assistant">
+            <span class="mdi mdi-message-text-outline chat-icon"></span>
+            <span class="mdi mdi-close close-icon" style="display: none;"></span>
+            <span id="chat-badge" class="chat-badge" style="display: none;">0</span>
+        </button>
+
+        <!-- Chat Window -->
+        <div id="chat-window" class="chat-window" style="display: none;">
+            <!-- Header -->
+            <div class="chat-header">
+                <div class="chat-header-info">
+                    <div class="chat-header-avatar">
+                        <span class="mdi mdi-robot-outline" id="chat-avatar-icon"></span>
+                    </div>
+                    <div>
+                        <h4 id="chat-window-title">AI Assistant & Admin</h4>
+                        <span class="chat-status" id="chat-window-status"><span class="status-dot online"></span>Trực tuyến</span>
+                    </div>
+                </div>
+                <div class="chat-header-actions">
+                    <button class="chat-header-btn" id="chat-minimize-btn" title="Thu nhỏ">
+                        <span class="mdi mdi-minus"></span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Admin Config Panel (Only visible to Admin) -->
+            <div id="chat-admin-config" class="chat-admin-config" style="display: none;">
+                <label for="ai-mode-select">AI Mode:</label>
+                <select id="ai-mode-select">
+                    <option value="ON">AI Tự động trả lời (ON)</option>
+                    <option value="AWAY">Thông báo Vắng mặt (AWAY)</option>
+                    <option value="OFF">Tắt AI (OFF - Thủ công)</option>
+                </select>
+            </div>
+
+            <!-- Threads List (Only visible to Admin when selecting user) -->
+            <div id="chat-threads-pane" class="chat-threads-pane" style="display: none;">
+                <div class="threads-header">Các cuộc hội thoại:</div>
+                <div id="chat-threads-list" class="chat-threads-list">
+                    <!-- Dynamic threads will go here -->
+                </div>
+            </div>
+
+            <!-- Messages Pane -->
+            <div id="chat-messages-pane" class="chat-messages-pane">
+                <div class="chat-messages-scroll" id="chat-messages-scroll">
+                    <!-- Dynamic messages bubble will go here -->
+                </div>
+            </div>
+
+            <!-- Quick Suggestions (Chips) -->
+            <div id="chat-suggestions" class="chat-suggestions">
+                <!-- Suggestion chips will go here -->
+            </div>
+
+            <!-- Footer / Input Form -->
+            <div class="chat-footer">
+                <form id="chat-input-form" style="display: flex; gap: 8px; width: 100%; align-items: center; margin: 0;">
+                    <!-- Back button for Admin to return to threads list -->
+                    <button type="button" id="chat-back-threads-btn" class="btn btn-outline" style="padding: 0; min-width: 32px; width: 32px; height: 32px; display: none; align-items: center; justify-content: center; border-radius: 50%;" title="Trở về danh sách">
+                        <span class="mdi mdi-arrow-left"></span>
+                    </button>
+                    <input type="text" id="chat-message-input" placeholder="Nhập tin nhắn..." required autocomplete="off">
+                    <button type="submit" class="chat-send-btn" title="Gửi">
+                        <span class="mdi mdi-send"></span>
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <!-- Load data.js (Variables: WEATHER_TELEMETRY, JANES_FORECAST) -->
     <script src="data.js"></script>
     
