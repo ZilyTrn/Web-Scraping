@@ -2531,7 +2531,11 @@ document.addEventListener("DOMContentLoaded", () => {
             messages = getChatMessages();
             
             // Get unique standard user emails
-            const userEmails = [...new Set(messages.map(m => m.from === admin.email ? m.to : m.from))].filter(email => email !== admin.email && email !== "ai");
+            const userEmails = [...new Set(messages.map(m => {
+                if (m.from === admin.email) return m.to;
+                if (m.from === "ai") return m.to;
+                return m.from;
+            }))].filter(email => email !== admin.email && email !== "ai");
             
             if (userEmails.length === 0) {
                 chatThreadsList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 30px 10px; font-size: 13px;">Chưa có cuộc hội thoại nào.</div>`;
@@ -2543,7 +2547,11 @@ document.addEventListener("DOMContentLoaded", () => {
             
             userEmails.forEach(email => {
                 const u = usersDb.find(x => x.email.toLowerCase() === email.toLowerCase()) || { name: email.split("@")[0] };
-                const userThreadMsgs = messages.filter(m => (m.from === email && m.to === admin.email) || (m.from === admin.email && m.to === email));
+                const userThreadMsgs = messages.filter(m => 
+                    (m.from === email && m.to === admin.email) || 
+                    (m.from === admin.email && m.to === email) ||
+                    (m.from === "ai" && m.to === email)
+                );
                 const unreadCount = userThreadMsgs.filter(m => m.from === email && !m.isRead).length;
                 
                 const item = document.createElement("div");

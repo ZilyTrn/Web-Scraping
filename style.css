@@ -1745,4 +1745,17 @@ body {
     background: #7f8c8d;
 }
 
+/* Password Eye Visibility Toggle Position Override */
+.input-wrap span.toggle-password {
+    right: 14px !important;
+    left: auto !important;
+    cursor: pointer;
+    font-size: 18px;
+    z-index: 10;
+    color: var(--text-muted);
+}
+.input-wrap span.toggle-password:hover {
+    color: var(--primary);
+}
+
 
