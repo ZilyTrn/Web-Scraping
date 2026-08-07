@@ -36,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const loginEmailInput = document.getElementById("login-email");
     const loginPasswordInput = document.getElementById("login-password");
     const loginError = document.getElementById("login-error");
+    const loginRememberInput = document.getElementById("login-remember");
     
     const registerNameInput = document.getElementById("register-name");
     const registerEmailInput = document.getElementById("register-email");
@@ -71,7 +72,7 @@ document.addEventListener("DOMContentLoaded", () => {
     let activeProjectIdKey = "";
 
     function getActiveProjectId() {
-        const savedUser = localStorage.getItem("axt_current_user");
+        const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
         if (savedUser) {
             const currentUser = JSON.parse(savedUser);
             activeProjectIdKey = `axt_active_project_id_${currentUser.email.replace("@", "_").replace(".", "_")}`;
@@ -139,7 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         // Filter projects based on the logged-in user
-        const savedUser = localStorage.getItem("axt_current_user");
+        const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
         if (savedUser) {
             const currentUser = JSON.parse(savedUser);
             const admin = getAdminUser();
@@ -213,7 +214,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // Check auth on load
-    const savedUser = localStorage.getItem("axt_current_user");
+    const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
     if (savedUser) {
         try {
             const user = JSON.parse(savedUser);
@@ -277,12 +278,17 @@ document.addEventListener("DOMContentLoaded", () => {
         
         const email = loginEmailInput.value.trim().toLowerCase();
         const password = loginPasswordInput.value;
+        const remember = loginRememberInput ? loginRememberInput.checked : false;
         
         // 1. Check default admin
         const admin = getAdminUser();
         if (email === admin.email.toLowerCase() && password === admin.password) {
             const user = { name: admin.name, email: admin.email, isAdmin: true };
-            localStorage.setItem("axt_current_user", JSON.stringify(user));
+            if (remember) {
+                localStorage.setItem("axt_current_user", JSON.stringify(user));
+            } else {
+                sessionStorage.setItem("axt_current_user", JSON.stringify(user));
+            }
             loginSuccess(user);
             return;
         }
@@ -293,7 +299,11 @@ document.addEventListener("DOMContentLoaded", () => {
         
         if (matchedUser) {
             const user = { name: matchedUser.name, email: matchedUser.email };
-            localStorage.setItem("axt_current_user", JSON.stringify(user));
+            if (remember) {
+                localStorage.setItem("axt_current_user", JSON.stringify(user));
+            } else {
+                sessionStorage.setItem("axt_current_user", JSON.stringify(user));
+            }
             loginSuccess(user);
         } else {
             loginError.textContent = "Invalid email or password.";
@@ -348,9 +358,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Handle Logout
     logoutBtn.addEventListener("click", () => {
-        localStorage.removeItem("axt_current_user");
-        loginForm.reset();
-        showAuthScreen();
+        if (confirm("Bạn có chắc chắn muốn đăng xuất khỏi hệ thống không?")) {
+            localStorage.removeItem("axt_current_user");
+            sessionStorage.removeItem("axt_current_user");
+            loginForm.reset();
+            showAuthScreen();
+        }
     });
 
     
@@ -1215,7 +1228,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const schema = projectSchemaInput.value.trim();
             const editIndex = projectEditIndexInput.value;
             
-            const savedUser = localStorage.getItem("axt_current_user");
+            const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
             if (!savedUser) return;
             const currentUser = JSON.parse(savedUser);
             const ownerEmail = currentUser.email.toLowerCase();
@@ -1578,7 +1591,7 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             // Load currently logged in session
-            const savedUser = localStorage.getItem("axt_current_user");
+            const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
             if (!savedUser) return;
             const currentUser = JSON.parse(savedUser);
 
@@ -1640,10 +1653,11 @@ document.addEventListener("DOMContentLoaded", () => {
                 }
             }
 
-            const savedUser = localStorage.getItem("axt_current_user");
+            const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
             if (!savedUser) return;
             const currentUser = JSON.parse(savedUser);
             const isEditingSelf = (origEmail === currentUser.email.toLowerCase());
+            const isPersistent = (localStorage.getItem("axt_current_user") !== null);
 
             if (origEmail === admin.email.toLowerCase()) {
                 // Updating Admin User details
@@ -1652,7 +1666,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (isEditingSelf) {
                     const session = { name, email, isAdmin: true };
-                    localStorage.setItem("axt_current_user", JSON.stringify(session));
+                    if (isPersistent) {
+                        localStorage.setItem("axt_current_user", JSON.stringify(session));
+                    } else {
+                        sessionStorage.setItem("axt_current_user", JSON.stringify(session));
+                    }
                     
                     // Immediately synchronize profile card UI in sidebar footer
                     userNameEl.textContent = name;
@@ -1669,7 +1687,11 @@ document.addEventListener("DOMContentLoaded", () => {
 
                 if (isEditingSelf) {
                     const session = { name, email };
-                    localStorage.setItem("axt_current_user", JSON.stringify(session));
+                    if (isPersistent) {
+                        localStorage.setItem("axt_current_user", JSON.stringify(session));
+                    } else {
+                        sessionStorage.setItem("axt_current_user", JSON.stringify(session));
+                    }
                     
                     // Immediately synchronize profile card UI in sidebar footer
                     userNameEl.textContent = name;

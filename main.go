@@ -127,8 +127,8 @@ func runWebServer(port string) {
 		for {
 			fmt.Println("[BACKGROUND] Khởi chạy crawler thu thập dữ liệu trong nền...")
 			runCrawlerOnce()
-			fmt.Println("[BACKGROUND] Hoàn thành crawler nền. Đang ngủ 30 phút...")
-			time.Sleep(30 * time.Minute)
+			fmt.Println("[BACKGROUND] Hoàn thành crawler nền. Đang ngủ 1 giờ...")
+			time.Sleep(1 * time.Hour)
 		}
 	}()
 
