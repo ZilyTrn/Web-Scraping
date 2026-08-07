@@ -281,6 +281,9 @@ document.addEventListener("DOMContentLoaded", () => {
         userEmailEl.textContent = user.email;
         userAvatarEl.textContent = user.name.charAt(0).toUpperCase();
         
+        // Update online status in database
+        if (typeof setOnlineStatus === "function") setOnlineStatus(user.email, true);
+        
         // Load projects list and check active status
         loadProjectsList();
         checkActiveProject();
@@ -413,6 +416,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // Handle Logout
     logoutBtn.addEventListener("click", () => {
         if (confirm("Bạn có chắc chắn muốn đăng xuất khỏi hệ thống không?")) {
+            const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
+            if (savedUser) {
+                try {
+                    const u = JSON.parse(savedUser);
+                    setOnlineStatus(u.email, false);
+                } catch(e) {}
+            }
             localStorage.removeItem("axt_current_user");
             sessionStorage.removeItem("axt_current_user");
             loginForm.reset();
@@ -1125,16 +1135,29 @@ document.addEventListener("DOMContentLoaded", () => {
         
         if (users.length === 0) {
             const tr = document.createElement("tr");
-            tr.innerHTML = `<td colspan="4" style="text-align: center; color: var(--text-muted); padding: 20px;">No registered accounts found. Only the default Admin is active.</td>`;
+            tr.innerHTML = `<td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">No registered accounts found. Only the default Admin is active.</td>`;
             tbody.appendChild(tr);
             return;
         }
+
+        const onlineUsers = JSON.parse(localStorage.getItem("axt_online_users") || "[]");
         
         users.forEach((u, index) => {
             const tr = document.createElement("tr");
+            const isOnline = onlineUsers.includes(u.email.toLowerCase());
             tr.innerHTML = `
                 <td>${u.name}</td>
                 <td>${u.email}</td>
+                <td>
+                    ${isOnline ? 
+                        `<span class="badge" style="background: rgba(46, 204, 113, 0.1); color: var(--green); border-color: rgba(46, 204, 113, 0.2); font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
+                            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #2ecc71; box-shadow: 0 0 8px #2ecc71;"></span> Online
+                         </span>` : 
+                        `<span class="badge" style="background: rgba(149, 165, 166, 0.1); color: var(--text-muted); border-color: rgba(149, 165, 166, 0.2); font-size: 11px; display: inline-flex; align-items: center; gap: 6px;">
+                            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #95a5a6;"></span> Offline
+                         </span>`
+                    }
+                </td>
                 <td>
                     <span class="password-text" id="pwd-${index}" style="-webkit-text-security: disc;">${u.password}</span>
                     <button class="btn btn-outline" style="padding: 4px 8px; font-size: 11px; margin-left: 10px; display: inline-flex;" onclick="togglePwdVisibility(${index})">
@@ -1800,6 +1823,110 @@ document.addEventListener("DOMContentLoaded", () => {
             if (profileModal) profileModal.style.display = "none";
         });
     }
+
+    // --- USER ONLINE / OFFLINE STATUS CONTROLLER ---
+    function setOnlineStatus(email, isOnline) {
+        if (!email) return;
+        let online = [];
+        try {
+            online = JSON.parse(localStorage.getItem("axt_online_users") || "[]");
+        } catch(e) {}
+        
+        if (isOnline) {
+            if (!online.includes(email.toLowerCase())) {
+                online.push(email.toLowerCase());
+            }
+        } else {
+            online = online.filter(e => e !== email.toLowerCase());
+        }
+        localStorage.setItem("axt_online_users", JSON.stringify(online));
+        
+        // Update sidebar avatar online dot class
+        const sidebarAvatarDot = document.querySelector(".account-profile .status-dot");
+        if (sidebarAvatarDot) {
+            if (isOnline) {
+                sidebarAvatarDot.className = "status-dot online";
+                sidebarAvatarDot.style.background = "#2ecc71";
+            } else {
+                sidebarAvatarDot.className = "status-dot offline";
+                sidebarAvatarDot.style.background = "#7f8c8d";
+            }
+        }
+    }
+
+    // Set offline on tab close or refresh
+    window.addEventListener("beforeunload", () => {
+        const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
+        if (savedUser) {
+            try {
+                const u = JSON.parse(savedUser);
+                setOnlineStatus(u.email, false);
+            } catch(e) {}
+        }
+    });
+
+    // Real-time synchronization across parallel tabs/devices
+    window.addEventListener("storage", (e) => {
+        // 1. If auth session changed
+        if (e.key === "axt_current_user" || e.key === "axt_admin" || e.key === "axt_users" || e.key === "axt_online_users") {
+            const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
+            if (!savedUser) {
+                // Force logout in this tab
+                showAuthScreen();
+            } else {
+                const user = JSON.parse(savedUser);
+                // Refresh profile sidebar card
+                userNameEl.textContent = user.name;
+                userEmailEl.textContent = user.email;
+                userAvatarEl.textContent = user.name.charAt(0).toUpperCase();
+                
+                // Refresh user list if admin
+                if (currentTab === "users") {
+                    populateUserTable();
+                }
+            }
+        }
+        
+        // 2. If projects list changed
+        if (e.key === "axt_projects") {
+            loadProjectsList();
+            populateProjectsList();
+            checkActiveProject();
+        }
+
+        // 3. If chat messages changed
+        if (e.key === "axt_chat_messages") {
+            if (typeof initChatWidget === "function") {
+                initChatWidget();
+            }
+            const chatWindow = document.getElementById("chat-window");
+            if (chatWindow && chatWindow.style.display === "flex") {
+                // If admin, refresh thread list or current thread messages
+                const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
+                if (savedUser) {
+                    const currentUser = JSON.parse(savedUser);
+                    const admin = getAdminUser();
+                    const isAdmin = currentUser.email.toLowerCase() === admin.email.toLowerCase();
+                    if (isAdmin) {
+                        if (selectedThreadUser) {
+                            renderMessages(selectedThreadUser);
+                        } else {
+                            renderThreadsList();
+                        }
+                    } else {
+                        renderMessages(currentUser.email);
+                    }
+                }
+            }
+        }
+
+        // 4. If password reset requests changed
+        if (e.key === "axt_reset_requests") {
+            if (currentTab === "users") {
+                populateAdminApprovalsTable();
+            }
+        }
+    });
 
     // --- PASSWORD VISIBILITY TOGGLE TOOL ---
     function setupPasswordToggles() {

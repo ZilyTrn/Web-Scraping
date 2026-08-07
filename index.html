@@ -262,7 +262,10 @@
             
             <div class="sidebar-footer">
                 <div class="account-profile">
-                    <div class="profile-avatar" id="user-avatar">H</div>
+                    <div style="position: relative;">
+                        <div class="profile-avatar" id="user-avatar">H</div>
+                        <span class="status-dot online" style="position: absolute; right: 0; bottom: 0; border: 2px solid var(--bg-dark-card); width: 10px; height: 10px;"></span>
+                    </div>
                     <div class="profile-info">
                         <h4 id="user-name">Linh</h4>
                         <span id="user-email">linhbeocorp.vn</span>
@@ -665,6 +668,7 @@
                                 <tr>
                                     <th>Name</th>
                                     <th>Email Address</th>
+                                    <th>Status</th>
                                     <th>Password</th>
                                     <th style="width: 180px; text-align: center;">Actions</th>
                                 </tr>

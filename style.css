@@ -1731,4 +1731,18 @@ body {
     transform: scale(1.08);
 }
 
+/* User Online/Offline Status Dots */
+.status-dot {
+    display: inline-block;
+    border-radius: 50%;
+    transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+.status-dot.online {
+    background: #2ecc71;
+    box-shadow: 0 0 8px #2ecc71;
+}
+.status-dot.offline {
+    background: #7f8c8d;
+}
+
 
