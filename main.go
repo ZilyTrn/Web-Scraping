@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/base64"
 	"encoding/csv"
 	"encoding/json"
@@ -15,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	_ "github.com/mattn/go-sqlite3"
 )
 
 // Configurations
@@ -104,6 +107,14 @@ func main() {
 	serverMode := flag.Bool("server", false, "Run in web server mode")
 	flag.Parse()
 
+	// Initialize database
+	if err := initDB(); err != nil {
+		fmt.Printf("[LỖI] Khởi tạo cơ sở dữ liệu thất bại: %v\n", err)
+	} else {
+		fmt.Println("[CƠ SỞ DỮ LIỆU] Khởi tạo cơ sở dữ liệu SQLite thành công.")
+		importExistingCSVToDB()
+	}
+
 	// On Render, the PORT environment variable is always defined.
 	port := os.Getenv("PORT")
 	if port != "" {
@@ -131,6 +142,9 @@ func runWebServer(port string) {
 			time.Sleep(1 * time.Hour)
 		}
 	}()
+
+	// Register API data handler
+	http.HandleFunc("/api/data", handleAPIData)
 
 	// Serve static files
 	fs := http.FileServer(http.Dir("."))
@@ -438,6 +452,7 @@ func scrapeJanesForecast(client *http.Client, token string, proj Project, outDir
 		return
 	}
 	fmt.Printf("  [THÀNH CÔNG] Đã lưu dự báo thời tiết tại: %s\n", outFile)
+	saveForecastToDB(proj.ID, bodyBytes)
 }
 
 // Downloads telemetry records and writes to CSV
@@ -534,6 +549,7 @@ func downloadTelemetry(client *http.Client, token, schema, projID, devExtID, sou
 			if err := csvWriter.Write(csvRow); err != nil {
 				return fmt.Errorf("lỗi ghi dòng dữ liệu: %v", err)
 			}
+			saveTelemetryToDB(projID, devName, row)
 		}
 
 		fmt.Printf("      -> Đã tải trang %d/%d (Đã lấy %d/%d bản ghi)...\n",
@@ -771,4 +787,252 @@ func sanitizeFilename(s string) string {
 	s = strings.ReplaceAll(s, ">", "-")
 	s = strings.ReplaceAll(s, "|", "-")
 	return s
+}
+
+// ==========================================
+// DATABASE PERSISTENCE LAYER (SQLITE/POSTGRES)
+// ==========================================
+
+var db *sql.DB
+
+func initDB() error {
+	var err error
+	dbPath := "./weather.db"
+	db, err = sql.Open("sqlite3", dbPath)
+	if err != nil {
+		return err
+	}
+
+	createTelemetryTable := `
+	CREATE TABLE IF NOT EXISTS telemetry (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		time TEXT,
+		project_id TEXT,
+		device_name TEXT,
+		temperature_avg TEXT,
+		humidity_avg TEXT,
+		rainfall TEXT,
+		rainfall_total TEXT,
+		wind_speed_avg TEXT,
+		wind_dir_var_avg TEXT,
+		msl_pressure TEXT,
+		solar_rad_avg TEXT,
+		deltat_avg TEXT,
+		dew_point_avg TEXT,
+		UNIQUE(time, project_id) ON CONFLICT REPLACE
+	);`
+	_, err = db.Exec(createTelemetryTable)
+	if err != nil {
+		return err
+	}
+
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_telemetry_time ON telemetry (time);")
+	_, _ = db.Exec("CREATE INDEX IF NOT EXISTS idx_telemetry_project ON telemetry (project_id);")
+
+	createForecastTable := `
+	CREATE TABLE IF NOT EXISTS forecasts (
+		project_id TEXT PRIMARY KEY,
+		forecast_json TEXT,
+		updated_at TEXT
+	);`
+	_, err = db.Exec(createForecastTable)
+	return err
+}
+
+func saveTelemetryToDB(projID, devName string, row map[string]interface{}) {
+	if db == nil {
+		return
+	}
+	
+	timeVal := getStringVal(row, "Timestamp")
+	if timeVal == "" {
+		timeVal = getStringVal(row, "time")
+		if timeVal == "" {
+			return
+		}
+	}
+	
+	temp := getAnyStringVal(row, []string{"Atmospheric Temperature (°C)", "temperature_avg"})
+	humidity := getAnyStringVal(row, []string{"Average Humidity (%)", "humidity_avg"})
+	rainfall := getAnyStringVal(row, []string{"Rainfall (mm)", "rainfall"})
+	rainfallTotal := getAnyStringVal(row, []string{"Total Rainfall (mm)", "rainfall_total"})
+	windSpeed := getAnyStringVal(row, []string{"Average Wind Speed  (km/h)", "wind_speed_avg"})
+	windDir := getAnyStringVal(row, []string{"Wind Direction", "wind_dir_var_avg"})
+	pressure := getAnyStringVal(row, []string{"MSL Pressure (hPa)", "msl_pressure"})
+	solarRad := getAnyStringVal(row, []string{"AverageSolarRadiation (W/m2)", "solar_rad_avg"})
+	deltaT := getAnyStringVal(row, []string{"Average Delta T (°C)", "deltat_avg"})
+	dewPoint := getAnyStringVal(row, []string{"Average Dew Point (°C)", "dew_point_avg"})
+
+	query := `
+	INSERT INTO telemetry (
+		time, project_id, device_name, temperature_avg, humidity_avg, 
+		rainfall, rainfall_total, wind_speed_avg, wind_dir_var_avg, 
+		msl_pressure, solar_rad_avg, deltat_avg, dew_point_avg
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`
+	
+	_, err := db.Exec(query, 
+		timeVal, projID, devName, temp, humidity, 
+		rainfall, rainfallTotal, windSpeed, windDir, 
+		pressure, solarRad, deltaT, dewPoint,
+	)
+	if err != nil {
+		// Log silently if needed
+	}
+}
+
+func getAnyStringVal(row map[string]interface{}, keys []string) string {
+	for _, k := range keys {
+		if val := getStringVal(row, k); val != "" {
+			return val
+		}
+	}
+	return ""
+}
+
+func getStringVal(row map[string]interface{}, key string) string {
+	val, ok := row[key]
+	if !ok || val == nil {
+		return ""
+	}
+	return fmt.Sprintf("%v", val)
+}
+
+func saveForecastToDB(projID string, forecastBytes []byte) {
+	if db == nil {
+		return
+	}
+	query := `INSERT OR REPLACE INTO forecasts (project_id, forecast_json, updated_at) VALUES (?, ?, ?);`
+	_, err := db.Exec(query, projID, string(forecastBytes), time.Now().Format(time.RFC3339))
+	if err != nil {
+		fmt.Printf("[DB ERROR] Failed to save forecast: %v\n", err)
+	}
+}
+
+func getTelemetryFromDB(projectID string) []map[string]interface{} {
+	var result []map[string]interface{}
+	if db == nil {
+		return result
+	}
+
+	query := `
+	SELECT time, temperature_avg, humidity_avg, rainfall, rainfall_total, 
+	       wind_speed_avg, wind_dir_var_avg, msl_pressure, solar_rad_avg, 
+	       deltat_avg, dew_point_avg 
+	FROM telemetry 
+	WHERE project_id = ? 
+	ORDER BY time DESC 
+	LIMIT 500;`
+
+	rows, err := db.Query(query, projectID)
+	if err != nil {
+		fmt.Printf("[DB ERROR] Query telemetry failed: %v\n", err)
+		return result
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var timeVal, temp, humidity, rainfall, rainfallTotal, windSpeed, windDir, pressure, solarRad, deltaT, dewPoint sql.NullString
+		err := rows.Scan(&timeVal, &temp, &humidity, &rainfall, &rainfallTotal, &windSpeed, &windDir, &pressure, &solarRad, &deltaT, &dewPoint)
+		if err != nil {
+			continue
+		}
+
+		record := map[string]interface{}{
+			"time":             nullStringVal(timeVal),
+			"temperature_avg":  nullStringVal(temp),
+			"humidity_avg":     nullStringVal(humidity),
+			"rainfall":         nullStringVal(rainfall),
+			"rainfall_total":   nullStringVal(rainfallTotal),
+			"wind_speed_avg":   nullStringVal(windSpeed),
+			"wind_dir_var_avg": nullStringVal(windDir),
+			"msl_pressure":     nullStringVal(pressure),
+			"solar_rad_avg":    nullStringVal(solarRad),
+			"deltat_avg":       nullStringVal(deltaT),
+			"dew_point_avg":    nullStringVal(dewPoint),
+		}
+		result = append(result, record)
+	}
+	return result
+}
+
+func nullStringVal(ns sql.NullString) interface{} {
+	if !ns.Valid {
+		return nil
+	}
+	return ns.String
+}
+
+func getForecastFromDB(projectID string) map[string]interface{} {
+	result := make(map[string]interface{})
+	if db == nil {
+		return result
+	}
+
+	var forecastJSON string
+	err := db.QueryRow("SELECT forecast_json FROM forecasts WHERE project_id = ?", projectID).Scan(&forecastJSON)
+	if err != nil {
+		err = db.QueryRow("SELECT forecast_json FROM forecasts LIMIT 1").Scan(&forecastJSON)
+		if err != nil {
+			return result
+		}
+	}
+
+	json.Unmarshal([]byte(forecastJSON), &result)
+	result["location"] = "Hồ Chí Minh, Việt Nam"
+	return result
+}
+
+func handleAPIData(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	projectID := r.URL.Query().Get("project_id")
+	if projectID == "" {
+		projectID = "1b73e2fe-1e6c-46c6-8534-82c0e03be283"
+	}
+
+	telemetry := getTelemetryFromDB(projectID)
+	forecast := getForecastFromDB(projectID)
+
+	response := map[string]interface{}{
+		"telemetry": telemetry,
+		"forecast":  forecast,
+	}
+
+	json.NewEncoder(w).Encode(response)
+}
+
+func importExistingCSVToDB() {
+	telemetryPath, forecastPath := findTelemetryAndForecastPaths()
+	if telemetryPath != "" {
+		fmt.Printf("[DATABASE] Phát hiện file telemetry sẵn có: %s. Tiến hành nạp...\n", telemetryPath)
+		file, err := os.Open(telemetryPath)
+		if err == nil {
+			defer file.Close()
+			reader := csv.NewReader(file)
+			headers, err := reader.Read()
+			if err == nil {
+				for {
+					row, err := reader.Read()
+					if err != nil {
+						break
+					}
+					record := make(map[string]interface{})
+					for i, header := range headers {
+						if i < len(row) {
+							record[strings.TrimSpace(header)] = row[i]
+						}
+					}
+					saveTelemetryToDB("1b73e2fe-1e6c-46c6-8534-82c0e03be283", "LINHBEOCORP", record)
+				}
+			}
+		}
+	}
+	if forecastPath != "" {
+		fmt.Printf("[DATABASE] Phát hiện file forecast sẵn có: %s. Tiến hành nạp...\n", forecastPath)
+		bytes, err := os.ReadFile(forecastPath)
+		if err == nil {
+			saveForecastToDB("1b73e2fe-1e6c-46c6-8534-82c0e03be283", bytes)
+		}
+	}
 }

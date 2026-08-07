@@ -3,11 +3,12 @@
 document.addEventListener("DOMContentLoaded", () => {
     console.log("Initializing AxisStream Dashboard App...");
     
-    // Check if data is loaded
-    if (typeof WEATHER_TELEMETRY === "undefined" || typeof JANES_FORECAST === "undefined") {
-        console.error("Error: data.js not loaded. Please run prepare_data.py first.");
-        return;
-    }
+    // Keep a copy of static data before overriding
+    const WEATHER_TELEMETRY_STATIC = typeof WEATHER_TELEMETRY !== "undefined" ? WEATHER_TELEMETRY : [];
+    const JANES_FORECAST_STATIC = typeof JANES_FORECAST !== "undefined" ? JANES_FORECAST : {};
+    
+    window.WEATHER_TELEMETRY = WEATHER_TELEMETRY_STATIC;
+    window.JANES_FORECAST = JANES_FORECAST_STATIC;
     
     // State
     let currentTab = "dashboard";
@@ -1215,6 +1216,39 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- PROJECT MANAGEMENT ---
 
+    function fetchProjectData(projectId, callback) {
+        if (syncIcon) syncIcon.classList.add("spinning");
+        
+        fetch(`/api/data?project_id=${projectId}`)
+            .then(r => r.json())
+            .then(data => {
+                window.WEATHER_TELEMETRY = data.telemetry || [];
+                window.JANES_FORECAST = data.forecast || {};
+                
+                // Fallback to static if empty database (for compatibility)
+                if (window.WEATHER_TELEMETRY.length === 0 && typeof WEATHER_TELEMETRY_STATIC !== "undefined") {
+                    window.WEATHER_TELEMETRY = WEATHER_TELEMETRY_STATIC;
+                }
+                if ((!window.JANES_FORECAST || !window.JANES_FORECAST.daily) && typeof JANES_FORECAST_STATIC !== "undefined") {
+                    window.JANES_FORECAST = JANES_FORECAST_STATIC;
+                }
+                
+                if (syncIcon) setTimeout(() => syncIcon.classList.remove("spinning"), 500);
+                if (callback) callback();
+            })
+            .catch(err => {
+                console.warn("Failed to fetch /api/data from database, falling back to static data.js:", err);
+                if (typeof window.WEATHER_TELEMETRY === "undefined") {
+                    window.WEATHER_TELEMETRY = typeof WEATHER_TELEMETRY_STATIC !== "undefined" ? WEATHER_TELEMETRY_STATIC : [];
+                }
+                if (typeof window.JANES_FORECAST === "undefined") {
+                    window.JANES_FORECAST = typeof JANES_FORECAST_STATIC !== "undefined" ? JANES_FORECAST_STATIC : {};
+                }
+                if (syncIcon) setTimeout(() => syncIcon.classList.remove("spinning"), 500);
+                if (callback) callback();
+            });
+    }
+
     function checkActiveProject() {
         const banner = document.getElementById("no-project-banner");
         
@@ -1268,10 +1302,12 @@ document.addEventListener("DOMContentLoaded", () => {
                     document.getElementById("project-gps").textContent = "";
                 }
                 
-                // Load telemetry data dynamically (every custom user project is simulated with real scraped data!)
-                loadDashboardData();
-                loadForecastData();
-                initLogsTable();
+                // Fetch dynamic data from SQL Database!
+                fetchProjectData(activeProjectId, () => {
+                    loadDashboardData();
+                    loadForecastData();
+                    initLogsTable();
+                });
             }
             
             // Navigate to current hash or fallback to dashboard
