@@ -119,7 +119,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     id: "1c623db4-80a3-4523-9aa4-979c8620a7a9",
                     name: "LBLB",
                     schema: "lblb",
-                    ownerEmail: "linh@linhbeocorp.vn",
+                    ownerEmail: "test1@gmail.com",
                     deviceId: "device_B01",
                     latitude: 10.762622,
                     longitude: 106.660172
@@ -132,12 +132,19 @@ document.addEventListener("DOMContentLoaded", () => {
         allProjectsList = list.map(p => {
             if (p.name === "TANBAOCORP_Demo") p.name = "LINHBEOCORP";
             if (p.name === "TBSG") p.name = "LBLB";
+            
+            // Dynamically override LBLB owner to test1@gmail.com
+            if (p.id === "1c623db4-80a3-4523-9aa4-979c8620a7a9") {
+                p.ownerEmail = "test1@gmail.com";
+            }
+            
             if (!p.ownerEmail) p.ownerEmail = "linh@linhbeocorp.vn";
             if (!p.deviceId) p.deviceId = p.id === "1b73e2fe-1e6c-46c6-8534-82c0e03be283" ? "device_A23" : "device_B01";
             if (!p.latitude) p.latitude = 10.762622;
             if (!p.longitude) p.longitude = 106.660172;
             return p;
         });
+        saveProjectsList();
 
         // Filter projects based on the logged-in user
         const savedUser = localStorage.getItem("axt_current_user") || sessionStorage.getItem("axt_current_user");
