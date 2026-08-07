@@ -23,9 +23,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const btnBackNav = document.getElementById("btn-back-nav");
     const syncIcon = document.getElementById("sync-icon");
     
-    // --- NAVIGATION HISTORY STATE ---
-    let tabHistory = [];
-    let isBackNavigating = false;
 
     // --- AUTH DOM Elements ---
     const authContainer = document.getElementById("auth-container");
@@ -303,46 +300,59 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     
-    // Tab switching
+    function switchToTab(targetTab) {
+        const item = document.querySelector(`.sidebar-nav li[data-target="${targetTab}"]`);
+        if (!item) return;
+        
+        // Update active navigation item
+        navItems.forEach(nav => nav.classList.remove("active"));
+        item.classList.add("active");
+        
+        // Switch tabs
+        tabs.forEach(tab => {
+            tab.classList.remove("active");
+            tab.style.display = "none";
+        });
+        const targetEl = document.getElementById(`${targetTab}-tab`);
+        if (targetEl) {
+            targetEl.classList.add("active");
+            targetEl.style.display = "flex";
+        }
+        
+        currentTab = targetTab;
+        console.log(`Switched to tab: ${currentTab}`);
+        updateBackButtonVisibility();
+        
+        // Re-render chart / tables
+        if (currentTab === "dashboard") {
+            renderTrendChart();
+        } else if (currentTab === "users") {
+            populateUserTable();
+        } else if (currentTab === "projects") {
+            populateProjectsList();
+        }
+    }
+
+    // Tab switching (updates URL hash to trigger hashchange router)
     navItems.forEach(item => {
         item.addEventListener("click", () => {
             const targetTab = item.getAttribute("data-target");
-            
-            // Update active navigation item
-            navItems.forEach(nav => nav.classList.remove("active"));
-            item.classList.add("active");
-            
-            // Switch tabs
-            tabs.forEach(tab => {
-                tab.classList.remove("active");
-                tab.style.display = "none";
-            });
-            const targetEl = document.getElementById(`${targetTab}-tab`);
-            if (targetEl) {
-                targetEl.classList.add("active");
-                targetEl.style.display = "flex";
-            }
-            
-            if (!isBackNavigating && currentTab !== targetTab) {
-                if (tabHistory.length === 0 || tabHistory[tabHistory.length - 1] !== currentTab) {
-                    tabHistory.push(currentTab);
-                    if (tabHistory.length > 20) tabHistory.shift();
-                }
-            }
-            
-            currentTab = targetTab;
-            console.log(`Switched to tab: ${currentTab}`);
-            updateBackButtonVisibility();
-            
-            // Re-render chart if switching back to dashboard
-            if (currentTab === "dashboard") {
-                renderTrendChart();
-            } else if (currentTab === "users") {
-                populateUserTable();
-            } else if (currentTab === "projects") {
-                populateProjectsList();
-            }
+            window.location.hash = targetTab;
         });
+    });
+
+    // Listen for browser Back/Forward navigation hashchange
+    window.addEventListener("hashchange", () => {
+        const hash = window.location.hash.replace("#", "") || "dashboard";
+        
+        // Check if there is an active project (prevent viewing other tabs if no active project)
+        const activeProj = projectsList.find(p => p.id === activeProjectId);
+        if ((!activeProj || projectsList.length === 0) && hash !== "projects" && hash !== "users") {
+            window.location.hash = "projects";
+            return;
+        }
+        
+        switchToTab(hash);
     });
 
 
@@ -1020,9 +1030,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
     function checkActiveProject() {
         const banner = document.getElementById("no-project-banner");
-        const dashboardTab = document.getElementById("dashboard-tab");
-        const forecastTab = document.getElementById("forecast-tab");
-        const logsTab = document.getElementById("logs-tab");
         
         if (!activeProjectId || projectsList.length === 0) {
             // Create banner if not exists
@@ -1039,44 +1046,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 const main = document.querySelector(".main-content");
                 main.insertBefore(newBanner, main.firstChild);
             }
-            // Hide other contents
-            tabs.forEach(tab => {
-                if (tab.id === "projects-tab") {
-                    tab.style.display = "flex";
-                    tab.classList.add("active");
-                } else {
-                    tab.style.display = "none";
-                    tab.classList.remove("active");
-                }
-            });
-            // Update sidebar nav to projects
-            navItems.forEach(nav => {
-                if (nav.getAttribute("data-target") === "projects") {
-                    nav.classList.add("active");
-                } else {
-                    nav.classList.remove("active");
-                }
-            });
-            currentTab = "projects";
             
             document.getElementById("project-badge").textContent = "No Project Active";
             document.getElementById("project-badge").style.background = "rgba(255, 94, 126, 0.1)";
             document.getElementById("project-badge").style.color = "var(--red)";
             document.getElementById("project-badge").style.borderColor = "rgba(255, 94, 126, 0.2)";
+            
+            // Force hash router to projects tab
+            window.location.hash = "projects";
         } else {
             // Remove banner if exists
             if (banner) banner.remove();
-            
-            // Show only the current active tab
-            tabs.forEach(tab => {
-                if (tab.id === `${currentTab}-tab`) {
-                    tab.style.display = "flex";
-                    tab.classList.add("active");
-                } else {
-                    tab.style.display = "none";
-                    tab.classList.remove("active");
-                }
-            });
             
             const activeProj = projectsList.find(p => p.id === activeProjectId);
             if (activeProj) {
@@ -1094,6 +1074,10 @@ document.addEventListener("DOMContentLoaded", () => {
                     setMockDeviceState(activeProj.name);
                 }
             }
+            
+            // Navigate to current hash or fallback to dashboard
+            const hash = window.location.hash.replace("#", "") || "dashboard";
+            switchToTab(hash);
         }
         if (typeof updateBackButtonVisibility === "function") {
             updateBackButtonVisibility();
@@ -1421,7 +1405,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- BACK BUTTON NAVIGATION & HISTORY ---
     function updateBackButtonVisibility() {
-        const hasHistory = tabHistory.length > 0;
+        const hasHistory = window.location.hash !== "" && window.location.hash !== "#dashboard";
         const isModalOpen = (detailsModal && detailsModal.style.display === "flex") || 
                             (projectModal && projectModal.style.display === "flex");
         if (btnBackNav) {
@@ -1444,17 +1428,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 updateBackButtonVisibility();
                 return;
             }
-            // 3. Navigate back in tab history
-            if (tabHistory.length > 0) {
-                const prevTab = tabHistory.pop();
-                isBackNavigating = true;
-                const navItem = document.querySelector(`.sidebar-nav li[data-target="${prevTab}"]`);
-                if (navItem) {
-                    navItem.click();
-                }
-                isBackNavigating = false;
-                updateBackButtonVisibility();
-            }
+            // 3. Otherwise, navigate back in browser history
+            window.history.back();
         });
     }
 
