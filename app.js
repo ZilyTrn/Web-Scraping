@@ -124,12 +124,20 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // --- AUTH LOGIC ---
     
-    // Default Admin User Config
-    const DEFAULT_ADMIN = {
-        name: "Linh",
-        email: "linh@linhbeocorp.vn",
-        password: "Linhbeo@123"
-    };
+    // Admin user config with persistence
+    function getAdminUser() {
+        const adminJSON = localStorage.getItem("axt_admin");
+        if (adminJSON) {
+            try {
+                return JSON.parse(adminJSON);
+            } catch (e) {}
+        }
+        return {
+            name: "Linh",
+            email: "linh@linhbeocorp.vn",
+            password: "Linhbeo@123"
+        };
+    }
 
     // Get users array from localStorage, or initialize it
     function getLocalUsers() {
@@ -188,7 +196,8 @@ document.addEventListener("DOMContentLoaded", () => {
         // Check if user is the admin to show/hide the User Management tab
         const navUsers = document.getElementById("nav-users");
         if (navUsers) {
-            if (user.email === DEFAULT_ADMIN.email) {
+            const admin = getAdminUser();
+            if (user.email.toLowerCase() === admin.email.toLowerCase()) {
                 navUsers.style.display = "flex";
             } else {
                 navUsers.style.display = "none";
@@ -226,8 +235,9 @@ document.addEventListener("DOMContentLoaded", () => {
         const password = loginPasswordInput.value;
         
         // 1. Check default admin
-        if (email === DEFAULT_ADMIN.email && password === DEFAULT_ADMIN.password) {
-            const user = { name: DEFAULT_ADMIN.name, email: DEFAULT_ADMIN.email };
+        const admin = getAdminUser();
+        if (email === admin.email.toLowerCase() && password === admin.password) {
+            const user = { name: admin.name, email: admin.email, isAdmin: true };
             localStorage.setItem("axt_current_user", JSON.stringify(user));
             loginSuccess(user);
             return;
@@ -1018,6 +1028,9 @@ document.addEventListener("DOMContentLoaded", () => {
                     </button>
                 </td>
                 <td style="text-align: center;">
+                    <button class="btn btn-outline" style="padding: 6px 12px; margin-right: 5px;" onclick="editUserAccount(${index})">
+                        Edit
+                    </button>
                     <button class="btn btn-outline" style="color: var(--red); border-color: rgba(255, 94, 126, 0.2); padding: 6px 12px;" onclick="deleteUserAccount(${index})">
                         Delete
                     </button>
@@ -1027,7 +1040,7 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
-    // Expose password toggle and delete helper functions globally so inline event handlers work
+    // Expose password toggle, edit, and delete helper functions globally so inline event handlers work
     window.togglePwdVisibility = function(index) {
         const span = document.getElementById(`pwd-${index}`);
         const btn = span.nextElementSibling;
@@ -1038,6 +1051,20 @@ document.addEventListener("DOMContentLoaded", () => {
             span.style.webkitTextSecurity = "none";
             btn.textContent = "Hide";
         }
+    };
+
+    window.editUserAccount = function(index) {
+        const users = getLocalUsers();
+        const u = users[index];
+        if (!u) return;
+
+        document.getElementById("profile-name-input").value = u.name;
+        document.getElementById("profile-email-input").value = u.email;
+        document.getElementById("profile-password-input").value = u.password;
+        document.getElementById("profile-edit-email").value = u.email;
+
+        const profileModal = document.getElementById("profile-modal");
+        if (profileModal) profileModal.style.display = "flex";
     };
 
     window.deleteUserAccount = function(index) {
@@ -1100,6 +1127,9 @@ document.addEventListener("DOMContentLoaded", () => {
             
             // Navigate to current hash or fallback to dashboard
             const hash = window.location.hash.replace("#", "") || "dashboard";
+            if (!window.location.hash) {
+                window.location.replace("#" + hash);
+            }
             switchToTab(hash);
         }
         if (typeof updateBackButtonVisibility === "function") {
@@ -1450,6 +1480,130 @@ document.addEventListener("DOMContentLoaded", () => {
             }
             // 3. Otherwise, navigate back in browser history
             window.history.back();
+        });
+    }
+
+    // --- PROFILE SETTINGS MODAL & ACCOUNT PERSONALIZATION ---
+    const accountProfile = document.querySelector(".account-profile");
+    const profileModal = document.getElementById("profile-modal");
+    const btnCloseProfile = document.getElementById("btn-close-profile");
+    const profileForm = document.getElementById("profile-form");
+
+    if (accountProfile) {
+        accountProfile.addEventListener("click", (e) => {
+            // Stop modal opening if clicking the logout button directly
+            if (e.target.closest("#btn-logout") || e.target.closest(".logout-btn")) {
+                return;
+            }
+
+            // Load currently logged in session
+            const savedUser = localStorage.getItem("axt_current_user");
+            if (!savedUser) return;
+            const currentUser = JSON.parse(savedUser);
+
+            let fullName = "";
+            let email = "";
+            let password = "";
+
+            const admin = getAdminUser();
+            if (currentUser.email.toLowerCase() === admin.email.toLowerCase()) {
+                fullName = admin.name;
+                email = admin.email;
+                password = admin.password;
+            } else {
+                const users = getLocalUsers();
+                const u = users.find(x => x.email.toLowerCase() === currentUser.email.toLowerCase());
+                if (u) {
+                    fullName = u.name;
+                    email = u.email;
+                    password = u.password;
+                }
+            }
+
+            document.getElementById("profile-name-input").value = fullName;
+            document.getElementById("profile-email-input").value = email;
+            document.getElementById("profile-password-input").value = password;
+            document.getElementById("profile-edit-email").value = email;
+
+            if (profileModal) profileModal.style.display = "flex";
+        });
+    }
+
+    if (btnCloseProfile) {
+        btnCloseProfile.addEventListener("click", () => {
+            if (profileModal) profileModal.style.display = "none";
+        });
+    }
+
+    if (profileForm) {
+        profileForm.addEventListener("submit", (e) => {
+            e.preventDefault();
+
+            const name = document.getElementById("profile-name-input").value.trim();
+            const email = document.getElementById("profile-email-input").value.trim().toLowerCase();
+            const password = document.getElementById("profile-password-input").value;
+            const origEmail = document.getElementById("profile-edit-email").value.toLowerCase();
+
+            const users = getLocalUsers();
+            const admin = getAdminUser();
+            
+            // Validation: Prevent email collision
+            if (email !== origEmail) {
+                if (email === admin.email.toLowerCase()) {
+                    alert("Email address is already in use by the Admin account.");
+                    return;
+                }
+                if (users.some(u => u.email.toLowerCase() === email)) {
+                    alert("Email address is already in use by another account.");
+                    return;
+                }
+            }
+
+            const savedUser = localStorage.getItem("axt_current_user");
+            if (!savedUser) return;
+            const currentUser = JSON.parse(savedUser);
+            const isEditingSelf = (origEmail === currentUser.email.toLowerCase());
+
+            if (origEmail === admin.email.toLowerCase()) {
+                // Updating Admin User details
+                const updatedAdmin = { name, email, password };
+                localStorage.setItem("axt_admin", JSON.stringify(updatedAdmin));
+
+                if (isEditingSelf) {
+                    const session = { name, email, isAdmin: true };
+                    localStorage.setItem("axt_current_user", JSON.stringify(session));
+                    
+                    // Immediately synchronize profile card UI in sidebar footer
+                    userNameEl.textContent = name;
+                    userEmailEl.textContent = email;
+                    userAvatarEl.textContent = name.charAt(0).toUpperCase();
+                }
+            } else {
+                // Updating standard user details
+                const userIdx = users.findIndex(u => u.email.toLowerCase() === origEmail);
+                if (userIdx !== -1) {
+                    users[userIdx] = { name, email, password };
+                    localStorage.setItem("axt_users", JSON.stringify(users));
+                }
+
+                if (isEditingSelf) {
+                    const session = { name, email };
+                    localStorage.setItem("axt_current_user", JSON.stringify(session));
+                    
+                    // Immediately synchronize profile card UI in sidebar footer
+                    userNameEl.textContent = name;
+                    userEmailEl.textContent = email;
+                    userAvatarEl.textContent = name.charAt(0).toUpperCase();
+                }
+
+                // If Admin was editing someone else, refresh the user list control panel
+                if (currentUser.email.toLowerCase() === admin.email.toLowerCase()) {
+                    populateUserTable();
+                }
+            }
+
+            alert("Account information saved successfully!");
+            if (profileModal) profileModal.style.display = "none";
         });
     }
 
