@@ -1248,7 +1248,13 @@ document.addEventListener("DOMContentLoaded", () => {
             // Remove banner if exists
             if (banner) banner.remove();
             
-            const activeProj = projectsList.find(p => p.id === activeProjectId);
+            let activeProj = projectsList.find(p => p.id === activeProjectId);
+            if (!activeProj && projectsList.length > 0) {
+                activeProjectId = projectsList[0].id;
+                localStorage.setItem(activeProjectIdKey, activeProjectId);
+                activeProj = projectsList[0];
+            }
+
             if (activeProj) {
                 document.getElementById("project-badge").textContent = activeProj.name;
                 document.getElementById("project-badge").style.background = "rgba(0, 242, 254, 0.1)";
