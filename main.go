@@ -794,33 +794,119 @@ func sanitizeFilename(s string) string {
 // ==========================================
 
 var db *sql.DB
+var isPostgres bool
+
+func readEnvVal(key string) string {
+	val := os.Getenv(key)
+	if val != "" {
+		return val
+	}
+
+	file, err := os.Open(".env")
+	if err != nil {
+		return ""
+	}
+	defer file.Close()
+
+	contentBytes, err := io.ReadAll(file)
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(string(contentBytes), "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		if len(parts) == 2 {
+			k := strings.TrimSpace(parts[0])
+			v := strings.TrimSpace(parts[1])
+			if k == key {
+				return v
+			}
+		}
+	}
+	return ""
+}
 
 func initDB() error {
 	var err error
-	dbPath := "./weather.db"
-	db, err = sql.Open("sqlite3", dbPath)
-	if err != nil {
-		return err
+	dbURL := os.Getenv("SUPABASE_DB_URL")
+	if dbURL == "" {
+		dbURL = os.Getenv("DATABASE_URL")
+	}
+	if dbURL == "" {
+		dbURL = readEnvVal("SUPABASE_DB_URL")
+	}
+	if dbURL == "" {
+		dbURL = readEnvVal("DATABASE_URL")
 	}
 
-	createTelemetryTable := `
-	CREATE TABLE IF NOT EXISTS telemetry (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		time TEXT,
-		project_id TEXT,
-		device_name TEXT,
-		temperature_avg TEXT,
-		humidity_avg TEXT,
-		rainfall TEXT,
-		rainfall_total TEXT,
-		wind_speed_avg TEXT,
-		wind_dir_var_avg TEXT,
-		msl_pressure TEXT,
-		solar_rad_avg TEXT,
-		deltat_avg TEXT,
-		dew_point_avg TEXT,
-		UNIQUE(time, project_id) ON CONFLICT REPLACE
-	);`
+	if dbURL != "" {
+		fmt.Printf("[DATABASE] Phát hiện cấu hình Postgres (Supabase). Đang kết nối...\n")
+		db, err = sql.Open("postgres", dbURL)
+		if err != nil {
+			return err
+		}
+		isPostgres = true
+	} else {
+		fmt.Printf("[DATABASE] Sử dụng SQLite cục bộ (weather.db).\n")
+		dbPath := "./weather.db"
+		db, err = sql.Open("sqlite3", dbPath)
+		if err != nil {
+			return err
+		}
+		isPostgres = false
+	}
+
+	err = db.Ping()
+	if err != nil {
+		return fmt.Errorf("lỗi kết nối database: %v", err)
+	}
+
+	var createTelemetryTable string
+	if isPostgres {
+		createTelemetryTable = `
+		CREATE TABLE IF NOT EXISTS telemetry (
+			id SERIAL PRIMARY KEY,
+			time TEXT,
+			project_id TEXT,
+			device_name TEXT,
+			temperature_avg TEXT,
+			humidity_avg TEXT,
+			rainfall TEXT,
+			rainfall_total TEXT,
+			wind_speed_avg TEXT,
+			wind_dir_var_avg TEXT,
+			msl_pressure TEXT,
+			solar_rad_avg TEXT,
+			deltat_avg TEXT,
+			dew_point_avg TEXT,
+			UNIQUE(time, project_id)
+		);`
+	} else {
+		createTelemetryTable = `
+		CREATE TABLE IF NOT EXISTS telemetry (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			time TEXT,
+			project_id TEXT,
+			device_name TEXT,
+			temperature_avg TEXT,
+			humidity_avg TEXT,
+			rainfall TEXT,
+			rainfall_total TEXT,
+			wind_speed_avg TEXT,
+			wind_dir_var_avg TEXT,
+			msl_pressure TEXT,
+			solar_rad_avg TEXT,
+			deltat_avg TEXT,
+			dew_point_avg TEXT,
+			UNIQUE(time, project_id) ON CONFLICT REPLACE
+		);`
+	}
+
 	_, err = db.Exec(createTelemetryTable)
 	if err != nil {
 		return err
@@ -863,18 +949,46 @@ func saveTelemetryToDB(projID, devName string, row map[string]interface{}) {
 	deltaT := getAnyStringVal(row, []string{"Average Delta T (°C)", "deltat_avg"})
 	dewPoint := getAnyStringVal(row, []string{"Average Dew Point (°C)", "dew_point_avg"})
 
-	query := `
-	INSERT INTO telemetry (
-		time, project_id, device_name, temperature_avg, humidity_avg, 
-		rainfall, rainfall_total, wind_speed_avg, wind_dir_var_avg, 
-		msl_pressure, solar_rad_avg, deltat_avg, dew_point_avg
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`
-	
-	_, err := db.Exec(query, 
-		timeVal, projID, devName, temp, humidity, 
-		rainfall, rainfallTotal, windSpeed, windDir, 
-		pressure, solarRad, deltaT, dewPoint,
-	)
+	var query string
+	var err error
+
+	if isPostgres {
+		query = `
+		INSERT INTO telemetry (
+			time, project_id, device_name, temperature_avg, humidity_avg, 
+			rainfall, rainfall_total, wind_speed_avg, wind_dir_var_avg, 
+			msl_pressure, solar_rad_avg, deltat_avg, dew_point_avg
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		ON CONFLICT (time, project_id) DO UPDATE SET
+			device_name = EXCLUDED.device_name,
+			temperature_avg = EXCLUDED.temperature_avg,
+			humidity_avg = EXCLUDED.humidity_avg,
+			rainfall = EXCLUDED.rainfall,
+			rainfall_total = EXCLUDED.rainfall_total,
+			wind_speed_avg = EXCLUDED.wind_speed_avg,
+			wind_dir_var_avg = EXCLUDED.wind_dir_var_avg,
+			msl_pressure = EXCLUDED.msl_pressure,
+			solar_rad_avg = EXCLUDED.solar_rad_avg,
+			deltat_avg = EXCLUDED.deltat_avg,
+			dew_point_avg = EXCLUDED.dew_point_avg;`
+		_, err = db.Exec(query, 
+			timeVal, projID, devName, temp, humidity, 
+			rainfall, rainfallTotal, windSpeed, windDir, 
+			pressure, solarRad, deltaT, dewPoint,
+		)
+	} else {
+		query = `
+		INSERT INTO telemetry (
+			time, project_id, device_name, temperature_avg, humidity_avg, 
+			rainfall, rainfall_total, wind_speed_avg, wind_dir_var_avg, 
+			msl_pressure, solar_rad_avg, deltat_avg, dew_point_avg
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`
+		_, err = db.Exec(query, 
+			timeVal, projID, devName, temp, humidity, 
+			rainfall, rainfallTotal, windSpeed, windDir, 
+			pressure, solarRad, deltaT, dewPoint,
+		)
+	}
 	if err != nil {
 		// Log silently if needed
 	}
@@ -901,8 +1015,21 @@ func saveForecastToDB(projID string, forecastBytes []byte) {
 	if db == nil {
 		return
 	}
-	query := `INSERT OR REPLACE INTO forecasts (project_id, forecast_json, updated_at) VALUES (?, ?, ?);`
-	_, err := db.Exec(query, projID, string(forecastBytes), time.Now().Format(time.RFC3339))
+	var query string
+	var err error
+
+	if isPostgres {
+		query = `
+		INSERT INTO forecasts (project_id, forecast_json, updated_at) 
+		VALUES ($1, $2, $3)
+		ON CONFLICT (project_id) DO UPDATE SET
+			forecast_json = EXCLUDED.forecast_json,
+			updated_at = EXCLUDED.updated_at;`
+		_, err = db.Exec(query, projID, string(forecastBytes), time.Now().Format(time.RFC3339))
+	} else {
+		query = `INSERT OR REPLACE INTO forecasts (project_id, forecast_json, updated_at) VALUES (?, ?, ?);`
+		_, err = db.Exec(query, projID, string(forecastBytes), time.Now().Format(time.RFC3339))
+	}
 	if err != nil {
 		fmt.Printf("[DB ERROR] Failed to save forecast: %v\n", err)
 	}
