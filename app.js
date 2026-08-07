@@ -65,8 +65,20 @@ document.addEventListener("DOMContentLoaded", () => {
     const modalTitle = document.getElementById("modal-title");
 
     // --- PROJECT STATE ---
-    let projectsList = [];
-    let activeProjectId = localStorage.getItem("axt_active_project_id") || null;
+    let allProjectsList = []; // All projects stored globally
+    let projectsList = [];    // Projects belonging only to the logged-in user
+    let activeProjectId = null;
+    let activeProjectIdKey = "";
+
+    function getActiveProjectId() {
+        const savedUser = localStorage.getItem("axt_current_user");
+        if (savedUser) {
+            const currentUser = JSON.parse(savedUser);
+            activeProjectIdKey = `axt_active_project_id_${currentUser.email.replace("@", "_").replace(".", "_")}`;
+            return localStorage.getItem(activeProjectIdKey) || null;
+        }
+        return null;
+    }
 
     // Load projects list from localStorage
     // --- DETAILS MODAL DOM Elements ---
@@ -90,36 +102,68 @@ document.addEventListener("DOMContentLoaded", () => {
             } catch (e) {}
         }
         
-        if (list && list.length > 0) {
-            // Automatically migrate and rename old project names if they exist in localStorage
-            projectsList = list.map(p => {
-                if (p.name === "TANBAOCORP_Demo") p.name = "LINHBEOCORP";
-                if (p.name === "TBSG") p.name = "LBLB";
-                return p;
-            });
-            saveProjectsList();
-        } else {
-            // Seed the default projects of the scraped AxisStream web data
-            projectsList = [
+        // Seed default projects if empty
+        if (list.length === 0) {
+            list = [
                 {
-                    name: "LINHBEOCORP",
                     id: "1b73e2fe-1e6c-46c6-8534-82c0e03be283",
-                    schema: "tanbaocorp"
+                    name: "LINHBEOCORP",
+                    schema: "tanbaocorp",
+                    ownerEmail: "linh@linhbeocorp.vn",
+                    deviceId: "device_A23",
+                    latitude: 10.762622,
+                    longitude: 106.660172
                 },
                 {
-                    name: "LBLB",
                     id: "1c623db4-80a3-4523-9aa4-979c8620a7a9",
-                    schema: "tbsg"
+                    name: "LBLB",
+                    schema: "lblb",
+                    ownerEmail: "linh@linhbeocorp.vn",
+                    deviceId: "device_B01",
+                    latitude: 10.762622,
+                    longitude: 106.660172
                 }
             ];
-            saveProjectsList();
-            activeProjectId = "1b73e2fe-1e6c-46c6-8534-82c0e03be283";
-            localStorage.setItem("axt_active_project_id", activeProjectId);
+            localStorage.setItem("axt_projects", JSON.stringify(list));
+        }
+
+        // Migrate and rename old legacy names if present
+        allProjectsList = list.map(p => {
+            if (p.name === "TANBAOCORP_Demo") p.name = "LINHBEOCORP";
+            if (p.name === "TBSG") p.name = "LBLB";
+            if (!p.ownerEmail) p.ownerEmail = "linh@linhbeocorp.vn";
+            if (!p.deviceId) p.deviceId = p.id === "1b73e2fe-1e6c-46c6-8534-82c0e03be283" ? "device_A23" : "device_B01";
+            if (!p.latitude) p.latitude = 10.762622;
+            if (!p.longitude) p.longitude = 106.660172;
+            return p;
+        });
+
+        // Filter projects based on the logged-in user
+        const savedUser = localStorage.getItem("axt_current_user");
+        if (savedUser) {
+            const currentUser = JSON.parse(savedUser);
+            const admin = getAdminUser();
+            if (currentUser.email.toLowerCase() === admin.email.toLowerCase()) {
+                // Admin sees all projects
+                projectsList = allProjectsList;
+            } else {
+                // Normal users see only their own projects
+                projectsList = allProjectsList.filter(p => p.ownerEmail && p.ownerEmail.toLowerCase() === currentUser.email.toLowerCase());
+            }
+        } else {
+            projectsList = [];
+        }
+
+        // Load active project ID
+        activeProjectId = getActiveProjectId();
+        if (!activeProjectId && projectsList.length > 0) {
+            activeProjectId = projectsList[0].id;
+            localStorage.setItem(activeProjectIdKey, activeProjectId);
         }
     }
 
     function saveProjectsList() {
-        localStorage.setItem("axt_projects", JSON.stringify(projectsList));
+        localStorage.setItem("axt_projects", JSON.stringify(allProjectsList));
     }
 
     // --- AUTH LOGIC ---
@@ -1102,6 +1146,9 @@ document.addEventListener("DOMContentLoaded", () => {
             document.getElementById("project-badge").style.color = "var(--red)";
             document.getElementById("project-badge").style.borderColor = "rgba(255, 94, 126, 0.2)";
             
+            document.getElementById("active-device-name").textContent = "No Device Connected";
+            document.getElementById("project-gps").textContent = "";
+            
             // Force hash router to projects tab
             window.location.hash = "projects";
         } else {
@@ -1115,14 +1162,17 @@ document.addEventListener("DOMContentLoaded", () => {
                 document.getElementById("project-badge").style.color = "var(--primary)";
                 document.getElementById("project-badge").style.borderColor = "rgba(0, 242, 254, 0.2)";
                 
-                // If the active project is the real cào project (matched by ID), load real telemetry
-                if (activeProj.id === "1b73e2fe-1e6c-46c6-8534-82c0e03be283") {
-                    loadDashboardData();
-                    loadForecastData();
-                    initLogsTable();
+                document.getElementById("active-device-name").textContent = `${activeProj.name} Device (${activeProj.deviceId || 'A23'})`;
+                if (activeProj.latitude && activeProj.longitude) {
+                    document.getElementById("project-gps").textContent = `GPS: ${activeProj.latitude.toFixed(4)}, ${activeProj.longitude.toFixed(4)}`;
                 } else {
-                    setMockDeviceState(activeProj.name);
+                    document.getElementById("project-gps").textContent = "";
                 }
+                
+                // Load telemetry data dynamically (every custom user project is simulated with real scraped data!)
+                loadDashboardData();
+                loadForecastData();
+                initLogsTable();
             }
             
             // Navigate to current hash or fallback to dashboard
@@ -1165,23 +1215,55 @@ document.addEventListener("DOMContentLoaded", () => {
             const schema = projectSchemaInput.value.trim();
             const editIndex = projectEditIndexInput.value;
             
+            const savedUser = localStorage.getItem("axt_current_user");
+            if (!savedUser) return;
+            const currentUser = JSON.parse(savedUser);
+            const ownerEmail = currentUser.email.toLowerCase();
+
+            // Create project object
+            const projectObj = {
+                name,
+                id,
+                schema,
+                ownerEmail,
+                deviceId: "device_" + Math.random().toString(36).substr(2, 6).toUpperCase(), // Registered device ID!
+                latitude: 10.762622 + (Math.random() - 0.5) * 0.1, // Nearby random HCMC GPS coordinates!
+                longitude: 106.660172 + (Math.random() - 0.5) * 0.1
+            };
+
             if (editIndex !== "") {
-                // Edit existing
+                // editIndex is index in projectsList (filtered list)
                 const idx = parseInt(editIndex);
-                projectsList[idx] = { name, id, schema };
+                const originalProj = projectsList[idx];
+                if (originalProj) {
+                    // Find in allProjectsList
+                    const globalIdx = allProjectsList.findIndex(p => p.id === originalProj.id);
+                    if (globalIdx !== -1) {
+                        // Preserve coordinates, owner, and device ID!
+                        projectObj.ownerEmail = originalProj.ownerEmail;
+                        projectObj.deviceId = originalProj.deviceId || projectObj.deviceId;
+                        projectObj.latitude = originalProj.latitude || projectObj.latitude;
+                        projectObj.longitude = originalProj.longitude || projectObj.longitude;
+                        
+                        allProjectsList[globalIdx] = projectObj;
+                    }
+                }
             } else {
                 // Add new
-                projectsList.push({ name, id, schema });
-                // If this is the first project, set it active automatically
-                if (projectsList.length === 1) {
+                allProjectsList.push(projectObj);
+                
+                // If the user currently has no active project set, activate this one
+                const activeId = getActiveProjectId();
+                if (!activeId) {
+                    localStorage.setItem(activeProjectIdKey, id);
                     activeProjectId = id;
-                    localStorage.setItem("axt_active_project_id", id);
                 }
             }
             
             saveProjectsList();
-            projectModal.style.display = "none";
+            loadProjectsList();
             
+            projectModal.style.display = "none";
             populateProjectsList();
             checkActiveProject();
         });
@@ -1225,6 +1307,10 @@ document.addEventListener("DOMContentLoaded", () => {
                         <strong>${proj.id.substring(0, 8)}...</strong>
                     </div>
                     <div>
+                        <span>Device ID:</span>
+                        <strong>${proj.deviceId || 'A23'}</strong>
+                    </div>
+                    <div>
                         <span>Org Schema:</span>
                         <strong>${proj.schema}</strong>
                     </div>
@@ -1249,7 +1335,7 @@ document.addEventListener("DOMContentLoaded", () => {
     window.activateProject = function(index) {
         const proj = projectsList[index];
         activeProjectId = proj.id;
-        localStorage.setItem("axt_active_project_id", proj.id);
+        localStorage.setItem(activeProjectIdKey, proj.id);
         populateProjectsList();
         checkActiveProject();
     };
@@ -1268,40 +1354,35 @@ document.addEventListener("DOMContentLoaded", () => {
     window.deleteProject = function(index) {
         if (confirm("Are you sure you want to delete this project? This will disconnect its telemetry data dashboard.")) {
             const deletedProj = projectsList[index];
-            projectsList.splice(index, 1);
+            if (deletedProj) {
+                // Find in allProjectsList
+                const globalIdx = allProjectsList.findIndex(p => p.id === deletedProj.id);
+                if (globalIdx !== -1) {
+                    allProjectsList.splice(globalIdx, 1);
+                }
+            }
             
             // If the deleted project was active, reset active project selection
             if (activeProjectId === deletedProj.id) {
-                activeProjectId = projectsList.length > 0 ? projectsList[0].id : null;
+                const userProjs = allProjectsList.filter(p => p.ownerEmail && p.ownerEmail.toLowerCase() === deletedProj.ownerEmail.toLowerCase());
+                activeProjectId = userProjs.length > 0 ? userProjs[0].id : null;
                 if (activeProjectId) {
-                    localStorage.setItem("axt_active_project_id", activeProjectId);
+                    localStorage.setItem(activeProjectIdKey, activeProjectId);
                 } else {
-                    localStorage.removeItem("axt_active_project_id");
+                    localStorage.removeItem(activeProjectIdKey);
                 }
             }
             
             saveProjectsList();
+            loadProjectsList();
             populateProjectsList();
             checkActiveProject();
         }
     };
 
     window.seedDefaultProjects = function() {
-        projectsList = [
-            {
-                name: "LINHBEOCORP",
-                id: "1b73e2fe-1e6c-46c6-8534-82c0e03be283",
-                schema: "tanbaocorp"
-            },
-            {
-                name: "LBLB",
-                id: "1c623db4-80a3-4523-9aa4-979c8620a7a9",
-                schema: "tbsg"
-            }
-        ];
-        saveProjectsList();
-        activeProjectId = "1b73e2fe-1e6c-46c6-8534-82c0e03be283";
-        localStorage.setItem("axt_active_project_id", activeProjectId);
+        localStorage.removeItem("axt_projects");
+        loadProjectsList();
         populateProjectsList();
         checkActiveProject();
     };
