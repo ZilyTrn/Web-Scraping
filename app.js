@@ -352,6 +352,29 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
         
+        // Handle metric details navigation via hash
+        if (hash.startsWith("details-")) {
+            // Underneath the modal, the dashboard tab must remain visible
+            switchToTab("dashboard");
+            
+            const metric = hash.replace("details-", "");
+            if (metric === "temp") {
+                openMetricDetails("temperature_avg", "Temperature (°C)", "#ff5e7e");
+            } else if (metric === "humidity") {
+                openMetricDetails("humidity_avg", "Humidity (%)", "#3b82f6");
+            } else if (metric === "rainfall") {
+                openMetricDetails("rainfall", "Rainfall (mm)", "#06b6d4");
+            } else if (metric === "wind") {
+                openMetricDetails("wind_speed_avg", "Wind Speed (km/h)", "#14b8a6");
+            }
+            return;
+        }
+        
+        // If we are navigating to a normal tab, make sure the details modal is closed!
+        if (detailsModal && detailsModal.style.display === "flex") {
+            detailsModal.style.display = "none";
+        }
+        
         switchToTab(hash);
     });
 
@@ -1283,8 +1306,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (btnCloseDetails) {
         btnCloseDetails.addEventListener("click", () => {
-            detailsModal.style.display = "none";
-            updateBackButtonVisibility();
+            window.location.hash = "dashboard";
         });
     }
 
@@ -1365,41 +1387,39 @@ document.addEventListener("DOMContentLoaded", () => {
         updateBackButtonVisibility();
     }
 
-    // Add Click Listeners to Dashboard Metric Cards
+    // Add Click Listeners to Dashboard Metric Cards (set hash to trigger detail views via router)
     const cardTemp = document.getElementById("card-temp");
     if (cardTemp) {
         cardTemp.addEventListener("click", () => {
-            openMetricDetails("temperature_avg", "Temperature (°C)", "#ff5e7e");
+            window.location.hash = "details-temp";
         });
     }
 
     const cardHumidity = document.getElementById("card-humidity");
     if (cardHumidity) {
         cardHumidity.addEventListener("click", () => {
-            openMetricDetails("humidity_avg", "Humidity (%)", "#3b82f6");
+            window.location.hash = "details-humidity";
         });
     }
 
     const cardRainfall = document.getElementById("card-rainfall");
     if (cardRainfall) {
         cardRainfall.addEventListener("click", () => {
-            openMetricDetails("rainfall", "Rainfall (mm)", "#06b6d4");
+            window.location.hash = "details-rainfall";
         });
     }
 
     const cardWind = document.getElementById("card-wind");
     if (cardWind) {
         cardWind.addEventListener("click", () => {
-            openMetricDetails("wind_speed_avg", "Wind Speed (km/h)", "#14b8a6");
+            window.location.hash = "details-wind";
         });
     }
 
     const cardForecast = document.getElementById("card-forecast");
     if (cardForecast) {
         cardForecast.addEventListener("click", () => {
-            // Click forecast -> redirect to detailed Jane's Forecast Tab!
-            const forecastNav = document.querySelector('[data-target="forecast"]');
-            if (forecastNav) forecastNav.click();
+            window.location.hash = "forecast";
         });
     }
 
